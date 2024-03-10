@@ -91,7 +91,7 @@ class TkApp(tk.Tk):
     def update_interface(self):
         self.interface.set_is_nature_turn(self.state.is_nature_turn())
         self.im = self.interface.get_img_from_state(self.state)
-        self.photoimage = ImageTk.PhotoImage(self.im)
+        self.photoimage = ImageTk.PhotoImage(self.im, master=self)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photoimage)
         self.canvas.update()
 
@@ -242,8 +242,8 @@ class Interface:
         return im
     
     def draw_rectangle_around_bar(self, draw: ImageDraw.Draw, base: tuple, base_size: int, color: tuple):
-        draw.rectangle([(base[0] - base_size // 2, base[1] - base_size),
-                (base[0] + base_size // 2, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance)],
+        draw.rectangle([(base[0] - base_size // 2, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance),
+                (base[0] + base_size // 2, base[1] - base_size)],
                 outline=color, width=4)
 
     def draw_dice(self, draw: ImageDraw.Draw, base: tuple, base_size: int, roll1: int, roll2: int):
@@ -279,11 +279,11 @@ class Interface:
         self.draw_bar(draw, (base[0] + base_size * 6.5, base[1]), base_size, Interface.grey)
         self.draw_bar(draw, (base[0] - base_size * 1, base[1]), base_size, Interface.grey)
         self.draw_bar(draw, (base[0] + base_size * 14, base[1]), base_size, Interface.grey)
-        draw.rectangle([(base[0] - base_size * 1.5, base[1]), 
-                        (base[0] + base_size * 14, base[1] - base_size)], 
+        draw.rectangle([(base[0] - base_size * 1.5, base[1] - base_size), 
+                        (base[0] + base_size * 14, base[1])], 
                         fill=Interface.grey)
-        draw.rectangle([(base[0] - base_size * 1.5, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance),
-                        (base[0] + base_size * 14.5, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance - base_size)], 
+        draw.rectangle([(base[0] - base_size * 1.5, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance - base_size),
+                        (base[0] + base_size * 14.5, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance)], 
                         fill=Interface.grey)
         self.draw_point_numbers(draw, base, base_size)
 
@@ -326,7 +326,7 @@ class Interface:
             draw.rectangle([(xy[0] - base_size // 2, xy[1]), (xy[0] + base_size // 2, round(xy[1] + Interface.ratio * base_size))],
                            outline=color, width=Interface.movement_rectangle_width)
         else:
-            draw.rectangle([(xy[0] + base_size // 2, round(xy[1] - Interface.ratio * base_size)), (xy[0] - base_size // 2, xy[1] - base_size)],
+            draw.rectangle([(xy[0] - base_size // 2, round(xy[1] - Interface.ratio * base_size)), (xy[0] + base_size // 2, xy[1] - base_size)],
                            outline=color, width=Interface.movement_rectangle_width)
 
     def point_is_flipped(self, point: int):
@@ -374,9 +374,10 @@ class Interface:
                     draw.text((x, y + (base_size // 4 * 3) * Interface.piece_size_scale), "{}".format(total_n), align="centre", anchor="mb", fill=other_color, font=Interface.piece_text_font)
 
     def draw_bar(self, draw: ImageDraw.Draw, base: tuple, base_size: int, color: tuple):
-        draw.rectangle([(base[0] - base_size // 2, base[1]),
-                        (base[0] + base_size // 2, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance)],
-                        color)
+        p1 = (base[0] - base_size // 2, base[1])
+        p2 = (base[0] + base_size // 2, base[1] - round(Interface.ratio * base_size) * 2 - Interface.centre_distance)
+        ps = [min(p1[0], p2[0]), min(p1[1], p2[1]), max(p1[0], p2[0]), max(p1[1], p2[1])]
+        draw.rectangle(ps, color)
 
     def draw_row_of_triangles(self, draw: ImageDraw.Draw, base: tuple, base_size: int, color1: tuple, color2: tuple, flipped: bool, n: int):
         for i in range(n):
