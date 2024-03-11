@@ -1,5 +1,4 @@
 import copy
-import elo
 import numpy as np
 import random
 from mcts import get_mcts_move, get_linear_default_policy
