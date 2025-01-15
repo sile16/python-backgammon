@@ -1,375 +1,542 @@
+# distutils: language=c
 # cython: profile=False
-import array
-import copy
+# cython: binding=True
+
+# Define NPY_NO_DEPRECATED_API to silence warnings
+# distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 import numpy as np
-import numpy.random as np_random
 cimport numpy as np
-cimport numpy.random as np_random
 cimport cython
-from libc.stdlib cimport rand, srand, RAND_MAX
-from cpython cimport array
+from libc.stdlib cimport rand, RAND_MAX, srand
 
-cdef int WHITE = 0
-cdef int BLACK = 1
-cdef int NONE = 2
+# Add debug flag at module level
+DEBUG = False
 
-np.import_array()
+# Export these functions at module level
+__all__ = ['set_debug', 'get_debug', 'set_random_seed', 'State']
 
-cdef class Move:
-    cdef public bint is_movement_move
-    cdef public signed char src, dst, n, i, j
+# Add global function to set debug mode
+def set_debug(enabled):
+    """Python-accessible wrapper for debug mode setting"""
+    global DEBUG
+    DEBUG = enabled
+
+def get_debug():
+    """Python-accessible wrapper for getting debug mode"""
+    global DEBUG
+    return DEBUG
+
+# Add function to set random seed
+def set_random_seed(seed):
+    """Python-accessible wrapper for setting random seed"""
+    srand(seed)
+
+# Constants
+cdef enum Player:
+    WHITE = 0
+    BLACK = 1
+    NONE = 2
+
+# Board positions
+cdef int BAR_POS = 0
+cdef int BEAR_OFF_POS = 25
+cdef int HOME_START_POS = 18
+cdef int OPP_BAR_POS = 25
+
+# Optimized data structures
+cdef struct Move:
+    unsigned char src
+    unsigned char n
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef class DiceRollHelper:
+    """Helper class for DiceRoll operations"""
     
-    def __hash__(self):
-        if self.is_movement_move:
-            return hash((self.src, self.dst, self.n))
-        else:
-            return hash((self.i, self.j))
+    @staticmethod
+    cdef void create(unsigned char[2] dice, unsigned char d1, unsigned char d2) nogil:
+        dice[0] = d1
+        dice[1] = d2
+    
+    @staticmethod
+    cdef void random(unsigned char[2] dice) nogil:
+        dice[0] = 1 + (rand() % 6)
+        dice[1] = 1 + (rand() % 6)
 
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef class BoardState:
+    """Static methods for board operations to support efficient move generation"""
+    
+    @staticmethod
+    cdef bint can_bear_off(unsigned char[:, ::1] board) nogil:
+        cdef unsigned char pip_count = 0
+        cdef int i
+        
+        for i in range(HOME_START_POS, BEAR_OFF_POS + 1):
+            pip_count += board[0, i]
+        
+        return pip_count == 15
+    
+    @staticmethod
+    cdef bint can_move_pip(unsigned char[:, ::1] board, unsigned char src, unsigned char n) nogil:
+        
+        
+        # do we have to move from the bar
+        if board[0, BAR_POS] > 0 and src != BAR_POS:
+            return False
+        
+        #is there a piece to move? 
+        if board[0, src] == 0:
+            return False
+            
+        cdef unsigned char dst = src + n
+        cdef unsigned char i
+
+        if dst > BEAR_OFF_POS:
+            if not BoardState.can_bear_off(board):
+                return False
+                
+            for i in range(HOME_START_POS, src):
+                if board[0, i] > 0:
+                    return False
+            dst = BEAR_OFF_POS
+            
+        if dst < BEAR_OFF_POS and board[1, dst] >= 2:
+            return False
+            
+        return True
+
+    @staticmethod
+    cdef void apply_move(unsigned char[:, ::1] board, Move move) nogil:
+        cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
+
+        
+        
+        board[0, move.src] -= 1
+        board[0, dst] += 1
+        
+        if dst < BEAR_OFF_POS:
+            if board[1, dst] == 1:
+                board[1, dst] = 0
+                board[1, OPP_BAR_POS] += 1
+            elif board[1, dst] > 1:
+                raise "Error: More than one opponent piece on destination, this should be blocked"
+    
+    @staticmethod
+    cdef void sanity_checks(unsigned char[:, ::1] board):
+        
+        #sum each row and ensure it is 15
+        cdef int i
+        for i in range(2):
+            if sum(board[i, :]) != 15:
+                raise "Error: Invalid board state, sum of row is not 15"
+        
+        #make sure white and black are not in the same position
+        for i in range(25):
+            if board[0, i] > 0 and board[1, i] > 0:
+                raise "Error: Invalid board state, white and black in the same position"
+        
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef class State:
-    cdef signed char [:, ::1] board
-    cdef signed char [::1] bar, beared_off
-    cdef int turn, turn_number, winner
-    cdef bint _is_nature_turn, game_has_started
-    cdef list legal_moves, _piece_moves_left
-    cdef array.array _array_template
+    """Main game state class"""
+    cdef:
+        #unsigned char[:, ::1] full_board
+        public unsigned char[:, ::1] board
+        public unsigned char[:, ::1] board_white
+        public unsigned char[:, ::1] board_black
+        public unsigned char[:, ::1] board_curr
+        public unsigned char[:, ::1] board_opp
+        public int player
+        public int winner
+        public unsigned char[2] dice
+        public list legal_moves
+        public int points
+        public list move_seq_list
     
-    def __init__(self):
-        self.board = np.zeros((2, 24), dtype=np.int8)
-        self.bar = np.zeros((2,), dtype=np.int8)
-        self.beared_off = np.zeros((2,), dtype=np.int8)
-        self.turn = NONE
-        self.turn_number = 1
-        self.winner = NONE
-        self._is_nature_turn = True
-        self.game_has_started = False
-        self.legal_moves = []
-        self._piece_moves_left = []
-        self._array_template = array.array('i', [])
+    def __cinit__(self):
         self.reset()
 
-    cpdef void reset(self):
-        self._reset()
-        self.generate_pre_game_2d6_moves()
-        
-    cpdef void debug_reset_board(self, signed char [:, ::1] board, signed char [::1] bar=np.zeros((2,), dtype=np.int8), signed char [::1] beared_off=np.zeros((2,), dtype=np.int8)):
-        self._reset()
-        self.board = np.copy(board)
-        self.bar = np.copy(bar)
-        self.beared_off = np.copy(beared_off)
-        self.generate_pre_game_2d6_moves()
-
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    def __copy__(self):
-        cdef State state
-        cdef Move move 
-        cdef signed char x
-        cdef int i, j
-        state = State()
-        for i in range(2):
-            for j in range(24):
-                state.board[i, j] = self.board[i, j]
-            state.bar[i] = self.bar[i]
-            state.beared_off[i] = self.beared_off[i]
-        state.turn = self.turn
-        state.turn_number = self.turn_number
-        state.winner = self.winner
-        state._is_nature_turn = self._is_nature_turn
-        state.game_has_started = self.game_has_started
-        if self.is_nature_turn():
-            state.legal_moves = state.get_roll_2d6_moves()
-        else:
-            state.legal_moves = [self._new_movement_move(move.src, move.dst, move.n) for move in self.legal_moves]
-        state._piece_moves_left = [x for x in self._piece_moves_left]
-        return state
-
-    cdef Move _new_movement_move(self, signed char src, signed char dst, signed char n):
-        cdef Move move = Move()
-        move.src = src
-        move.dst = dst
-        move.n = n
-        move.is_movement_move = True
-        return move
+    cpdef int get_move_count(self):
+        return len(self.move_seq_list)
     
-    cdef void _reset(self):
-        self.board = np.zeros((2, 24), dtype=np.int8)
-        self.bar = np.zeros((2,), dtype=np.int8)
-        self.beared_off = np.zeros((2,), dtype=np.int8)
-        self.turn = NONE
-        self.turn_number = 1
-        self._is_nature_turn = True
-        self.game_has_started = False
-        self._piece_moves_left = []
+    cpdef void reset(self):
+        self.player = NONE
         self.winner = NONE
-        #Place white pieces
-        self.board[WHITE, 23] = 2
-        self.board[WHITE, 12] = 5
-        self.board[WHITE, 7] = 3
-        self.board[WHITE, 5] = 5
-        #Place black pieces
-        self.board[BLACK, 0] = 2
-        self.board[BLACK, 11] = 5
-        self.board[BLACK, 16] = 3
-        self.board[BLACK, 18] = 5
+        self.legal_moves = []
+        self.points = 0
+        #self.board_opp = NULL # can't assign NULL to memory view
+        #self.board_curr = NULL # can't assign NULL to memory view
+        self.dice = [0, 0]
+        self.move_seq_list = []
+        
 
-    def get_board(self):
-        return np.asarray(self.board)
+        self.set_board(np.array([
+            [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]
+        ], dtype=np.uint8))
 
-    def get_bar(self):
-        return np.asarray(self.bar)
+    # Inside the State class in state.pyx
+    cpdef set_dice(self, dice):
+        """Set dice values for testing purposes."""
+        if dice[0] > 0 and dice[0] < 7 and dice[1] > 0 and dice[1] < 7:
+            self.dice[0], self.dice[1] = dice
 
-    def get_beared_off(self):
-        return np.asarray(self.beared_off)
+    cpdef void set_board(self, board_array):
 
-    cpdef int get_player_turn(self):
-        return self.turn
+        if isinstance(board_array, np.ndarray):
+            self.board = np.ascontiguousarray(board_array, dtype=np.uint8)
+        else:
+            self.board = np.ascontiguousarray(np.array(board_array, dtype=np.uint8))
+        
+        self.board_white = self.board[:, 0:25]  # White's view
+        self.board_black = np.ascontiguousarray(self.board[::-1, ::-1])  # Black's view
 
-    cpdef list get_moves(self):
-        return self.legal_moves
+        if self.player != NONE:
+            # call set player ot the current player to setup boards correctly
+            self.set_player(self.player)
+    
+    cpdef void pick_first_player(self):
+        while self.player == NONE:
+            DiceRollHelper.random(self.dice)
+            if not self.dice[0] == self.dice[1]:
+                if self.dice[0] > self.dice[1]:
+                    self.set_player(WHITE)
+                else:
+                    self.set_player(BLACK)
+    
+    cpdef void set_player(self, int player):
+        self.player = player
+        if player == WHITE:
+            self.board_curr = self.board_white
+            self.board_opp = self.board_black
+        else:
+            self.board_curr = self.board_black
+            self.board_opp = self.board_white
+    
+    cpdef void roll_dice(self):
+        DiceRollHelper.random(self.dice)
 
-    cpdef int get_winner(self):
-        return self.winner
+    cdef bint is_dice_valid(self):
+        if self.dice[0] > 0 and self.dice[0] < 7 and \
+           self.dice[1] > 0 and self.dice[1] < 7:
+           return True
+        return False
+    
+    cpdef list get_legal_moves(self):
+        if self.player == NONE:
+            raise "Error player is not set yet"
 
-    cpdef bint is_nature_turn(self):
-        return self._is_nature_turn
+        if not self.is_dice_valid():
+            raise f"Error Dice not valid: dice: {self.dice}"
+        
+        if DEBUG:
+            print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: {self.dice}")
+        return MoveGenerator.generate_moves(self.board_curr, self.dice[0], self.dice[1])
+    
+    cpdef void do_moves(self, MoveSequence moveSeq):
+        cdef int i
 
-    cpdef bint has_game_started(self):
-        return self.game_has_started
+        assert self.player != NONE, "Player must be set before making moves"
+        
+        
+        if moveSeq:
+            self.move_seq_list.append(moveSeq.copy())
+            for i in range(moveSeq.n_moves):
+                if not BoardState.can_move_pip(self.board_curr ,moveSeq.moves[i].src, moveSeq.moves[i].n):
+                    if DEBUG:
+                        print(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}")
+                        print(np.array_str(self.board_curr, precision=2, suppress_small=True))
+                    raise f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}"
 
-    cpdef void set_nature_turn(self, bint is_nature_turn):
-        self._is_nature_turn = is_nature_turn
+                BoardState.apply_move(self.board_curr, moveSeq.moves[i])
+                
+                if DEBUG:
+                    BoardState.sanity_checks(self.board_curr)
 
-    cpdef void set_turn(self, int player):
-        self.turn = player
+        self._goto_next_turn()
+    
+    cdef void _goto_next_turn(self):
+        self.check_for_winner()
+        if not self.isTerminal():
+            self.set_player(1 - self.player)
+        
+    
+    cpdef bint isTerminal(self):
+        return self.winner != NONE
+    
+    cpdef void check_for_winner(self):
+        if self.board_curr[0, BEAR_OFF_POS] == 15:
+            self.winner = self.player
+            self.points = self._calculate_winner_points()
+    
+    cdef int _calculate_winner_points(self):
+        if self.winner == NONE:
+            return 0
 
-    @cython.wraparound(False)
-    @cython.boundscheck(False)    
-    @cython.nonecheck(False)
+        if self.board_opp[0, BEAR_OFF_POS] > 0:
+            return 1
+
+        cdef int i
+        for i in range(HOME_START_POS, BEAR_OFF_POS):
+            if self.board_opp[1, i] > 0:
+                return 3
+        
+        return 2  # Gammon
+    
     cpdef int play_game_to_end(self):
         cdef int i, n_moves
         cdef list moves
-        while not self.game_ended():
-            moves = self.get_moves()
+        if self.player == NONE:
+            self.pick_first_player()
+            self.roll_dice()
+        while not self.isTerminal():
+            moves = self.get_legal_moves()
             n_moves = len(moves)
-            i = int(rand() / RAND_MAX * n_moves)
-            self.do_move(moves[i])
-        return self.get_winner()
+            if n_moves > 0:
+                i = rand() % n_moves
+                self.do_moves(moves[i])
+            self.roll_dice()
+        return self.winner
 
-    @cython.wraparound(False)
-    @cython.boundscheck(False)    
-    @cython.nonecheck(False)
-    cpdef int play_game_to_depth(self, int depth):
-        cdef int i, ply, n_moves
-        cdef list moves
-        ply = 0
-        while not self.game_ended() and ply < depth:
-            moves = self.get_moves()
-            n_moves = len(moves)
-            i = int(rand() / RAND_MAX * n_moves)
-            self.do_move(moves[i])
-            ply += 1
-        return self.get_winner()
 
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    cdef bint _has_piece(self, int point) nogil:
-        """Returns True if point has a piece belonging to the player whose turn it is"""
-        return self.board[self.turn, point] > 0
+cdef class MoveSequence:
+    cdef:
+        public Move[4] moves
+        public unsigned char[2] dice
+        public unsigned char n_moves
+        public unsigned char[:, ::1] final_board
+        public bint has_final_board
+
+    def __cinit__(self, dice=None):
+        self.n_moves = 0
+        self.has_final_board = False  # Initialize flag
+        self.dice = [0, 0]  # Initialize to zeros
+        if dice is not None:
+            self.dice[0] = dice[0]
+            self.dice[1] = dice[1]
+
+    cpdef list get_moves_tuple(self):
+        """Return a list of move tuples (src, n)"""
+        cdef list result = []
+        cdef int i
+        for i in range(self.n_moves):
+            result.append((self.moves[i].src, self.moves[i].n))
+        return result
+
+    cdef Move* get_moves(self):
+        """Return a pointer to the moves array"""
+        return &self.moves[0]
     
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    cdef int _forward(self, int point, int n) nogil:
-        cdef int new_point
-        """Gets point n steps forward from point from the perspective of the player whose turn it is. Returns -1 if no such point exists or is unmovable"""
-        new_point = point - n if self.turn == WHITE else point + n
-        new_point = new_point if new_point >= 0 and new_point < 24 else -1
-        if new_point != -1:
-            new_point = new_point if self.board[self._other_player(), new_point] <= 1 else -1
-        return new_point
+    cpdef MoveSequence add_move(self, unsigned char src, unsigned char n):
+        if self.n_moves < 4:
+            self.moves[self.n_moves].src = src
+            self.moves[self.n_moves].n = n
+            self.n_moves += 1
+        return self
 
-    cpdef int bar_point(self):
-        return -1 if self.turn == BLACK else 24
+    cpdef MoveSequence add_move_o(self, Move move):
+        if self.n_moves < 4:
+            self.moves[self.n_moves] = move
+            self.n_moves += 1
+        return self
+    
+    cdef MoveSequence copy(self):
+        cdef MoveSequence new_seq = MoveSequence()
+        cdef int i
+        new_seq.dice[0] = self.dice[0]
+        new_seq.dice[1] = self.dice[1]
+        for i in range(self.n_moves):
+            new_seq.add_move(self.moves[i].src, self.moves[i].n)
+        
+        # Copy final board state if it exists
+        if self.has_final_board:
+            new_seq.set_final_board(self.final_board)
+       
+        return new_seq
+    
+    cdef void set_final_board(self, unsigned char[:, ::1] board):
+        cdef unsigned char[:, ::1] board_copy = np.asarray(board).copy()
+        self.final_board = board_copy
+        self.has_final_board = True
 
-    cpdef int bearing_off_point(self):
-        return -1 if self.turn == WHITE else 24
 
-    cdef int _bar_point(self) nogil:
-        return -1 if self.turn == BLACK else 24
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef class MoveGenerator:
+    """Static methods for generating legal moves"""
+    
+    @staticmethod
+    cdef list generate_moves(unsigned char[:, ::1] board, unsigned char d1, unsigned char d2):
+        cdef list all_sequences = []
+        cdef unsigned char[2] reverse_dice
+        cdef MoveSequence curr_seq
+    
+        if DEBUG:
+            print(f"Generating moves with dice {d1} {d2} :\n")
+            print("Calling _gen_moves_recuriseve")
 
-    cdef int _bearing_off_point(self) nogil:
-        return -1 if self.turn == WHITE else 24
+        
+        #This covers doubles and first order non-double
+        MoveGenerator._generate_moves_recursive(
+            board,
+            0,
+            d1,
+            d2,
+            MoveSequence([d1, d2]),
+            all_sequences
+        )
+        if DEBUG:
+            print("Returned from _gen_moves_recursive")
 
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    cdef array.array _get_points_with_pieces(self):
-        cdef array.array points = array.clone(self._array_template, 0, False)
-        cdef int i, point
-        i = 0
-        for point in range(24):
-            if self._has_piece(point):
-                array.resize_smart(points, i + 1)
-                points[i] = point
-                i += 1
-        return points
+        if d1 != d2:
+            # this changes the order of 2 die
+            reverse_dice[0] = d2
+            reverse_dice[1] = d1
 
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    cpdef list get_movement_moves(self):
-        """Returns a list of all possible moves that can be made using the rolls from numbers obtained from a particular pair of dice"""
-        cdef list legal_moves = []
-        cdef int i, src, dest, n
-        cdef array.array points_with_pieces = self._get_points_with_pieces()#[point for point in range(24) if self._has_piece(point)]
-        for n in set(self._piece_moves_left):
-            if self.bar[self.turn] > 0:
-                dest = self._forward(self._bar_point(), n)
-                if dest > -1:
-                    legal_moves.append(self._new_movement_move(self._bar_point(), dest, n))
-            else:
-                if self._can_bear_off():
-                    if self._has_piece(n - 1 if self.turn == WHITE else 24 - n):
-                        legal_moves.append(self._new_movement_move(n - 1 if self.turn == WHITE else 24 - n, self._bearing_off_point(), n))
-                for i in range(len(points_with_pieces)):
-                    src = points_with_pieces[i]
-                    dest = self._forward(src, n)
-                    if dest > -1:
-                        legal_moves.append(self._new_movement_move(src, dest, n))
-
-        return legal_moves
-
-    cdef void _generate_piece_moves_from_dice(self, Move dice):
-        self._piece_moves_left.clear()
-        if dice.i == dice.j:
-            self._piece_moves_left = [dice.i] * 4
-        else:
-            self._piece_moves_left = [dice.i, dice.j]
-
-    cpdef void generate_movement_moves(self):
-        self.legal_moves = self.get_movement_moves()
-
-    cpdef int other_player(self):
-        return WHITE if self.turn == BLACK else BLACK if self.turn == WHITE else NONE
-
-    cdef int _other_player(self) nogil:
-        return WHITE if self.turn == BLACK else BLACK if self.turn == WHITE else NONE
-
-    cpdef bint can_bear_off(self):
-        return self._can_bear_off()
-
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    cdef bint _can_bear_off(self) nogil:
-        """Returns True if current player can bear off pieces"""
-        cdef int lower, upper, i
-        if self.turn == WHITE:
-            lower = 6
-            upper = 24
-        else:
-            lower = 0
-            upper = 18
-
-        for i in range(lower, upper, 1):
-            if self.board[self.turn, i] > 0:
-                return False
-        return True
-
-    @cython.wraparound(False)
-    @cython.boundscheck(False)
-    @cython.initializedcheck(False)
-    cpdef void do_move(self, Move move):
-        if self.is_nature_turn():
-            if self.has_game_started():
-                self._generate_piece_moves_from_dice(move)
-                self.generate_movement_moves()
-                self.set_nature_turn(False)
-                if len(self.legal_moves) == 0:
-                    self._goto_next_turn()
-            else:
-                if move.i == move.j:
-                    self.generate_pre_game_2d6_moves()
-                else:
-                    if move.i > move.j:
-                        self.set_turn(WHITE)
-                    else:
-                        self.set_turn(BLACK)
-                    self.game_has_started = True
-                    self._generate_piece_moves_from_dice(move)
-                    self.generate_movement_moves()
-                    self.set_nature_turn(False)
-                    if len(self.legal_moves) == 0:
-                        self._goto_next_turn()
-        else:
-            #Move piece
-            #Moving off bar
-            if move.src in [-1, 24]:
-                self.bar[self.turn] -= 1
-            #Movement
-            else:
-                self.board[self.turn, move.src] -= 1
-            #Bearing off
-            if move.dst in [-1, 24]:
-                self.beared_off[self.turn] += 1
-            #Movement
-            else:
-                if self.board[self._other_player(), move.dst] == 1:
-                    self.bar[self._other_player()] += 1
-                    self.board[self._other_player(), move.dst] = 0
-                self.board[self.turn, move.dst] += 1
-            self._piece_moves_left.remove(move.n)
-            if len(self._piece_moves_left) == 0:
-                self._goto_next_turn()
-            else:
-                self.generate_movement_moves()
-                if len(self.legal_moves) == 0:
-                    self._goto_next_turn()
-
-    cdef void _goto_next_turn(self):
-        self.check_for_winner()
-        if not self.game_ended():
-            self.turn = BLACK if self.turn == WHITE else WHITE
-            self.set_nature_turn(True)
-            self._piece_moves_left = []
-            self.generate_nature_moves()
-            if self.turn == WHITE:
-                self.turn_number += 1
-
-    cpdef bint game_ended(self):
-        return self.winner != NONE
-
-    cpdef bint check_for_winner(self):
-        if self.n_beared_off_pieces(self.turn) == 15:
-            self.winner = self.turn
-
-    cpdef signed char n_pieces_on_bar(self, int player):
-        return self.bar[player]
-
-    cpdef signed char n_pieces_on_board(self, int player):
-        return np.sum(self.board[player]) + self.bar[player]
-
-    cpdef signed char n_beared_off_pieces(self, int player):
-        return self.beared_off[player]
-
-    cpdef void generate_pre_game_2d6_moves(self):
-        self.legal_moves = self.get_roll_2d6_moves()
-
-    cpdef void generate_nature_moves(self):
-        """Generates all possible rollings of a 2d6 as the possible legal moves"""
-        self.legal_moves = self.get_roll_2d6_moves()
-
-    cpdef list get_roll_2d6_moves(self):
-        """Generates all possible rollings of a 2d6."""
-        cdef int i, j
+            MoveGenerator._generate_moves_recursive(
+                board,
+                0,
+                d2,
+                d1,
+                MoveSequence(reverse_dice),
+                all_sequences
+            )
+        
+        return MoveGenerator._filter_moves(all_sequences)
+    
+    @staticmethod
+    cdef void _generate_moves_recursive(
+        unsigned char[:, ::1] board,
+        unsigned char move_num,
+        unsigned char d1,
+        unsigned char d2,
+        MoveSequence curr_sequence,
+        list all_sequences
+    ):
+        cdef int src
         cdef Move move
-        cdef list moves = []
-        for i in range(1, 7):
-            for j in range(1, 7):
-                move = Move()
-                move.i = i
-                move.j = j
-                move.is_movement_move = False
-                moves.append(move)
-        return moves
+        cdef unsigned char[:, ::1] new_board
+        cdef unsigned char die_value
+        cdef bint found_one_board = False
+        cdef MoveSequence new_sequence
+        cdef bint isDouble = curr_sequence.dice[0] == curr_sequence.dice[1]
+        
+        if DEBUG:
+            print(f"_gen_moves Move number: {move_num}, Die value: {curr_sequence.dice}, Current moves: {curr_sequence.moves}")
+            print(f"Len of all_seq: {len(all_sequences)},")
+
+        if len(all_sequences) > 1000:
+            if DEBUG:
+                print(f"Max sequences hit 1000")
+            return
+        
+        if move_num == 0:
+            die_value = d1
+        elif move_num == 1:
+            die_value = d2
+        elif not isDouble and move_num == 2:
+            curr_sequence.set_final_board(board)  # Store final board state
+            all_sequences.append(curr_sequence.copy()) # do we need a copy here?   this should be the final board. 
+            return
+        elif isDouble and move_num < 4:
+            die_value = curr_sequence.dice[0]
+        elif move_num == 4:
+            curr_sequence.set_final_board(board)  # Store final board state
+            all_sequences.append(curr_sequence.copy()) # do we need a copy here?   this should be the final board. 
+            return
+        else:
+            # Debug print statement
+            if DEBUG:
+                print(f"Move number: {move_num}, Die value: {die_value}, Current sequence: {curr_sequence}, Board state:\n{board}")
+            
+            #assert False, "Invalid move_num in recursive generation"
+        
+        if DEBUG:
+            print(f"_gen_moves Die value: {die_value}, Current moves: {curr_sequence.moves}")
+
+        
+        for src in range(BAR_POS, BEAR_OFF_POS): #BEAROFF is not included
+            if BoardState.can_move_pip(board, src, die_value):
+                move.src = src
+                move.n = die_value
+                
+                new_board = np.asarray(board).copy()
+                BoardState.apply_move(new_board, move)
+
+                new_sequence = curr_sequence.copy()
+                new_sequence.add_move(move.src, move.n)
+                
+                MoveGenerator._generate_moves_recursive(
+                    new_board,
+                    move_num + 1,
+                    d1,
+                    d2,
+                    new_sequence,
+                    all_sequences
+                )
+                found_one_board = True
+        
+        if not found_one_board:
+            # didn't find any other possible moves this may be the end of the sequence we need to save this one
+            # otherwise if more were found then this is an invalid move by definition
+
+            curr_sequence.set_final_board(board)  # Store final board state
+            all_sequences.append(curr_sequence.copy()) # again is a copy necessary? 
+            return
+
+    
+    @staticmethod
+    cdef bytes _board_to_bytes(unsigned char[:, ::1] board) :
+        # Convert board state to a bytes representation for hashing
+        return bytes(board.tobytes())
+
+    @staticmethod
+    cdef list _filter_moves(list sequences):
+        if not sequences:
+            return []
+            
+        # First filter by maximum moves used
+        cdef int max_die
+        cdef int max_moves = max(seq.n_moves for seq in sequences)
+        cdef set unique_states = set()
+        cdef list unique_sequences = []
+        cdef list sequences2 = []
+        cdef bytes board_hash
+        cdef MoveSequence seq
+        
+        #filters sequences with less than max moves
+        sequences = [seq for seq in sequences if seq.n_moves == max_moves]
+        
+        #filter sequences with less than max die if only 1 move possible.
+        if max_moves == 1:
+            max_die = 0
+            for seq in sequences:
+                if seq.moves[0].n > max_die:
+                    max_die = seq.moves[0].n
+            
+            for seq in sequences:
+                if seq.moves[0].n == max_die:
+                    sequences2.append(seq)
+        
+        # Filter duplicates using the stored final board states
+        
+        
+        for seq in sequences:
+            if not seq.has_final_board:
+                assert False, "Sequence does not have final board state"
+            
+            # Get hashable representation of stored final board state
+            board_arr = np.asarray(seq.final_board)
+            board_hash = board_arr.tobytes()
+            
+            # Only keep sequence if board state is unique
+            if board_hash not in unique_states:
+                unique_states.add(board_hash)
+                unique_sequences.append(seq)
+        
+        return unique_sequences

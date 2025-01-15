@@ -1,15 +1,23 @@
-from setuptools import setup
-from setuptools.extension import Extension
+from setuptools import setup, Extension
 from Cython.Build import cythonize
-import numpy
-import os.path
+import numpy as np
 
-state_ext = Extension("state", sources=['state.pyx'], include_dirs=[numpy.get_include()], libraries=['npyrandom'], 
-                library_dirs=[os.path.join(numpy.get_include(), '..', '..', 'random', 'lib')])
-
-mcts_ext = Extension("mcts", sources=['mcts.pyx'], include_dirs=[numpy.get_include()])
-utils_ext = Extension("utils", sources=['utils.pyx'], include_dirs=[numpy.get_include()])
+extensions = [
+    Extension(
+        "state",
+        ["state.pyx"],
+        include_dirs=[np.get_include()],
+        define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+    )
+]
 
 setup(
-    ext_modules = cythonize([state_ext, mcts_ext, utils_ext], language_level=3, annotate=True)
+    ext_modules=cythonize(
+        extensions,
+        compiler_directives={
+            'language_level': "3",
+            'binding': True,
+        }
+    ),
+    include_dirs=[np.get_include()]
 )

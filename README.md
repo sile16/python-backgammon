@@ -1,5 +1,7 @@
 # python-backgammon
 
+Forked from: https://github.com/Tracing/python-backgammon
+
 A game of Backgammon programmed in python with AI.
 
 Requirements: 
