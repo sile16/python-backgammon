@@ -42,6 +42,7 @@ cdef int BAR_POS = 0
 cdef int BEAR_OFF_POS = 25
 cdef int HOME_START_POS = 18
 cdef int OPP_BAR_POS = 25
+cdef int OPP_BEAR_OFF_POS = 0
 
 # Optimized data structures
 cdef struct Move:
@@ -229,12 +230,11 @@ cdef class State:
     cpdef void set_player(self, int player):
         
 
-        if True:
-            print("Set Player Before")
+        if DEBUG:
             print()
+            print(f"Before player = {self.player}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
             print(np.array_str(self.board_curr, precision=2, suppress_small=True))
-            print("player = {self.player}")
             BoardState.sanity_checks(self.board_curr)
 
         self.player = player
@@ -243,10 +243,8 @@ cdef class State:
         else:
             self.board_curr = self.board[::-1, ::-1]
 
-        if True:
-            print(f"After Set {player}")
-            print(f"Board state:\n{self.board}")
-            print("player = {self.player}")
+        if DEBUG:
+            print(f"After Set Player {self.player}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
             print(np.array_str(self.board_curr, precision=2, suppress_small=True))
             BoardState.sanity_checks(self.board)
@@ -316,7 +314,7 @@ cdef class State:
         return self.winner != NONE
     
     cpdef void check_for_winner(self):
-        if self.board_curr[self.player, BEAR_OFF_POS] == 15:
+        if self.board_curr[0, BEAR_OFF_POS] == 15:
             self.winner = self.player
             self.points = self._calculate_winner_points()
     
@@ -324,8 +322,8 @@ cdef class State:
         if self.winner == NONE:
             return 0
 
-        
-        if self.board_curr[1, BEAR_OFF_POS] > 0:
+        #opponent has born off at least 1
+        if self.board_curr[1, OPP_BEAR_OFF_POS] > 0:
             return 1
 
         # check for opponent pieces in curr home / opponent BAR

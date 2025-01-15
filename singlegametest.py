@@ -109,5 +109,5 @@ def run_games(n_games):
             print("\nNo games completed successfully")
 
 if __name__ == "__main__":
-    N_GAMES = 100
+    N_GAMES = 1000
     run_games(N_GAMES)
