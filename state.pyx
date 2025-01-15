@@ -65,13 +65,11 @@ cdef class DiceRollHelper:
 
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef class BoardState:
     """Static methods for board operations to support efficient move generation"""
     
     @staticmethod
-    cdef bint can_bear_off(unsigned char[:, ::1] board) nogil:
+    cdef bint can_bear_off(np.ndarray[np.uint8_t, ndim=2] board):
         cdef unsigned char pip_count = 0
         cdef int i
         
@@ -81,76 +79,103 @@ cdef class BoardState:
         return pip_count == 15
     
     @staticmethod
-    cdef bint can_move_pip(unsigned char[:, ::1] board, unsigned char src, unsigned char n) nogil:
-        
-        
-        # do we have to move from the bar
+    cdef bint can_move_pip(np.ndarray[np.uint8_t, ndim=2] board, unsigned char src, unsigned char n) :
+        cdef unsigned char dst
+        cdef unsigned char i
+
+        # Must move from bar first
         if board[0, BAR_POS] > 0 and src != BAR_POS:
             return False
         
-        #is there a piece to move? 
+        # Must have a piece to move
         if board[0, src] == 0:
             return False
             
-        cdef unsigned char dst = src + n
-        cdef unsigned char i
-
-        if dst > BEAR_OFF_POS:
+        dst = src + n
+        
+        # Handle bearing off
+        if dst >= BEAR_OFF_POS:
             if not BoardState.can_bear_off(board):
                 return False
-                
-            for i in range(HOME_START_POS, src):
-                if board[0, i] > 0:
-                    return False
-            dst = BEAR_OFF_POS
             
-        if dst < BEAR_OFF_POS and board[1, dst] >= 2:
+            if dst > BEAR_OFF_POS:
+                for i in range(HOME_START_POS, src):
+                    if board[0, i] > 0:
+                        return False
+
+            return True
+            
+        # Check if destination is blocked by opponent
+        if board[1, dst] > 1:
             return False
             
         return True
 
     @staticmethod
-    cdef void apply_move(unsigned char[:, ::1] board, Move move) nogil:
+    cdef void apply_move(np.ndarray[np.uint8_t, ndim=2] board, Move move):
         cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
 
+        if DEBUG:
+            print(f"Applying move: {move.src} {move.n}")
+            print(f"Board state:\n{board}")
+            print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+            print(np.array_str(board, precision=2, suppress_small=True))
         
-        
+        # Move piece from source to destination
         board[0, move.src] -= 1
         board[0, dst] += 1
         
+        # Handle hitting opponent's blot
         if dst < BEAR_OFF_POS:
+            
             if board[1, dst] == 1:
                 board[1, dst] = 0
                 board[1, OPP_BAR_POS] += 1
             elif board[1, dst] > 1:
-                raise "Error: More than one opponent piece on destination, this should be blocked"
-    
+                raise ValueError("Error: More than one opponent piece on destination")
+
+        if DEBUG:
+            print(f"done with move: {move.src} {move.n}")
+            print(f"Board state:\n{board}")
+            print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+            print(np.array_str(board, precision=2, suppress_small=True))
+            print("")
+            print("")
+
     @staticmethod
-    cdef void sanity_checks(unsigned char[:, ::1] board):
-        
-        #sum each row and ensure it is 15
+    cdef void sanity_checks(np.ndarray[np.uint8_t, ndim=2] board):
         cdef int i
-        for i in range(2):
-            if sum(board[i, :]) != 15:
-                raise "Error: Invalid board state, sum of row is not 15"
+        cdef int sum_white = 0
+        cdef int sum_black = 0
         
-        #make sure white and black are not in the same position
-        for i in range(25):
+        # Check piece counts
+        for i in range(26):
+            sum_white += board[0, i]
+            sum_black += board[1, i]
+        
+        if sum_white != 15 or sum_black != 15:
+            #print sums:
+            print(f"sum_white: {sum_white} sum_black: {sum_black}")
+            print(f"Board state:\n{board}")
+            print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+            print(np.array_str(board, precision=2, suppress_small=True))
+            raise ValueError("Error: Invalid board state, piece count not 15")
+        
+        # Check for overlapping pieces
+        for i in range(1, 25):
             if board[0, i] > 0 and board[1, i] > 0:
-                raise "Error: Invalid board state, white and black in the same position"
-        
+                print(f"Board state:\n{board}")
+                print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+                print(np.array_str(board, precision=2, suppress_small=True))
+                raise ValueError("Error: Invalid board state, overlapping pieces")
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef class State:
     """Main game state class"""
     cdef:
-        #unsigned char[:, ::1] full_board
-        public unsigned char[:, ::1] board
-        public unsigned char[:, ::1] board_white
-        public unsigned char[:, ::1] board_black
-        public unsigned char[:, ::1] board_curr
-        public unsigned char[:, ::1] board_opp
+        public np.ndarray board
+        public np.ndarray board_curr
         public int player
         public int winner
         public unsigned char[2] dice
@@ -160,7 +185,7 @@ cdef class State:
     
     def __cinit__(self):
         self.reset()
-
+    
     cpdef int get_move_count(self):
         return len(self.move_seq_list)
     
@@ -169,36 +194,67 @@ cdef class State:
         self.winner = NONE
         self.legal_moves = []
         self.points = 0
-        #self.board_opp = NULL # can't assign NULL to memory view
-        #self.board_curr = NULL # can't assign NULL to memory view
         self.dice = [0, 0]
         self.move_seq_list = []
         
-
-        self.set_board(np.array([
+        
+        # Initialize board with starting position
+        self.board = np.zeros((2, 26), dtype=np.uint8)
+        # Set starting positions for both players
+        self.set_board([
             [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]
-        ], dtype=np.uint8))
+            [0, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]
+        ])
 
-    # Inside the State class in state.pyx
+    cpdef void set_board(self, board_array):
+        if isinstance(board_array, np.ndarray):
+            self.board = np.array(board_array, dtype=np.uint8)
+        else:
+            self.board = np.array(board_array, dtype=np.uint8)
+        
+        self.board_curr = self.board[:,:]
+    
+    cpdef np.ndarray get_board(self):
+        return np.array([
+            self.board[WHITE],
+            self.board[BLACK]  # Reverse black's view
+        ], dtype=np.uint8)
+
+    cpdef np.ndarray get_board_white_black(self):
+        return np.array([
+            self.board[WHITE],
+            self.board[BLACK][::-1]
+        ], dtype=np.uint8)
+    
+    cpdef void set_player(self, int player):
+        
+
+        if True:
+            print("Set Player Before")
+            print()
+            print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+            print(np.array_str(self.board_curr, precision=2, suppress_small=True))
+            print("player = {self.player}")
+            BoardState.sanity_checks(self.board_curr)
+
+        self.player = player
+        if player == WHITE:
+            self.board_curr = self.board[:,:]
+        else:
+            self.board_curr = self.board[::-1, ::-1]
+
+        if True:
+            print(f"After Set {player}")
+            print(f"Board state:\n{self.board}")
+            print("player = {self.player}")
+            print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+            print(np.array_str(self.board_curr, precision=2, suppress_small=True))
+            BoardState.sanity_checks(self.board)
+    
     cpdef set_dice(self, dice):
         """Set dice values for testing purposes."""
         if dice[0] > 0 and dice[0] < 7 and dice[1] > 0 and dice[1] < 7:
             self.dice[0], self.dice[1] = dice
-
-    cpdef void set_board(self, board_array):
-
-        if isinstance(board_array, np.ndarray):
-            self.board = np.ascontiguousarray(board_array, dtype=np.uint8)
-        else:
-            self.board = np.ascontiguousarray(np.array(board_array, dtype=np.uint8))
-        
-        self.board_white = self.board[:, 0:25]  # White's view
-        self.board_black = np.ascontiguousarray(self.board[::-1, ::-1])  # Black's view
-
-        if self.player != NONE:
-            # call set player ot the current player to setup boards correctly
-            self.set_player(self.player)
     
     cpdef void pick_first_player(self):
         while self.player == NONE:
@@ -208,15 +264,6 @@ cdef class State:
                     self.set_player(WHITE)
                 else:
                     self.set_player(BLACK)
-    
-    cpdef void set_player(self, int player):
-        self.player = player
-        if player == WHITE:
-            self.board_curr = self.board_white
-            self.board_opp = self.board_black
-        else:
-            self.board_curr = self.board_black
-            self.board_opp = self.board_white
     
     cpdef void roll_dice(self):
         DiceRollHelper.random(self.dice)
@@ -229,34 +276,34 @@ cdef class State:
     
     cpdef list get_legal_moves(self):
         if self.player == NONE:
-            raise "Error player is not set yet"
+            raise ValueError("Error player is not set yet")
 
         if not self.is_dice_valid():
-            raise f"Error Dice not valid: dice: {self.dice}"
+            raise ValueError(f"Error Dice not valid: dice: {self.dice}")
         
         if DEBUG:
-            print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: {self.dice}")
-        return MoveGenerator.generate_moves(self.board_curr, self.dice[0], self.dice[1])
+            # Print dice in decimal format
+            print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: [{self.dice[0]}, {self.dice[1]}]")
+            
+        return MoveGenerator.generate_moves(self.board_curr, self.player, self.dice[0], self.dice[1])
     
     cpdef void do_moves(self, MoveSequence moveSeq):
         cdef int i
 
         assert self.player != NONE, "Player must be set before making moves"
         
-        
         if moveSeq:
             self.move_seq_list.append(moveSeq.copy())
             for i in range(moveSeq.n_moves):
-                if not BoardState.can_move_pip(self.board_curr ,moveSeq.moves[i].src, moveSeq.moves[i].n):
-                    if DEBUG:
-                        print(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}")
-                        print(np.array_str(self.board_curr, precision=2, suppress_small=True))
-                    raise f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}"
-
-                BoardState.apply_move(self.board_curr, moveSeq.moves[i])
                 
                 if DEBUG:
-                    BoardState.sanity_checks(self.board_curr)
+                    BoardState.sanity_checks(self.board)
+                    if not BoardState.can_move_pip(self.board_curr, moveSeq.moves[i].src, moveSeq.moves[i].n):
+                        print(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}")
+                        raise ValueError(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}" )        
+            
+                BoardState.apply_move(self.board_curr, moveSeq.moves[i])
+
 
         self._goto_next_turn()
     
@@ -264,13 +311,12 @@ cdef class State:
         self.check_for_winner()
         if not self.isTerminal():
             self.set_player(1 - self.player)
-        
     
     cpdef bint isTerminal(self):
         return self.winner != NONE
     
     cpdef void check_for_winner(self):
-        if self.board_curr[0, BEAR_OFF_POS] == 15:
+        if self.board_curr[self.player, BEAR_OFF_POS] == 15:
             self.winner = self.player
             self.points = self._calculate_winner_points()
     
@@ -278,13 +324,15 @@ cdef class State:
         if self.winner == NONE:
             return 0
 
-        if self.board_opp[0, BEAR_OFF_POS] > 0:
+        
+        if self.board_curr[1, BEAR_OFF_POS] > 0:
             return 1
 
+        # check for opponent pieces in curr home / opponent BAR
         cdef int i
-        for i in range(HOME_START_POS, BEAR_OFF_POS):
-            if self.board_opp[1, i] > 0:
-                return 3
+        for i in range(HOME_START_POS, OPP_BAR_POS):
+            if self.board_curr[1, i] > 0:
+                return 3 # backgammon
         
         return 2  # Gammon
     
@@ -303,19 +351,18 @@ cdef class State:
             self.roll_dice()
         return self.winner
 
-
 cdef class MoveSequence:
     cdef:
         public Move[4] moves
         public unsigned char[2] dice
         public unsigned char n_moves
-        public unsigned char[:, ::1] final_board
+        public np.ndarray final_board
         public bint has_final_board
 
     def __cinit__(self, dice=None):
         self.n_moves = 0
-        self.has_final_board = False  # Initialize flag
-        self.dice = [0, 0]  # Initialize to zeros
+        self.has_final_board = False
+        self.dice = [0, 0]
         if dice is not None:
             self.dice[0] = dice[0]
             self.dice[1] = dice[1]
@@ -353,15 +400,13 @@ cdef class MoveSequence:
         for i in range(self.n_moves):
             new_seq.add_move(self.moves[i].src, self.moves[i].n)
         
-        # Copy final board state if it exists
         if self.has_final_board:
             new_seq.set_final_board(self.final_board)
        
         return new_seq
     
-    cdef void set_final_board(self, unsigned char[:, ::1] board):
-        cdef unsigned char[:, ::1] board_copy = np.asarray(board).copy()
-        self.final_board = board_copy
+    cdef void set_final_board(self, np.ndarray[np.uint8_t, ndim=2] board):  
+        self.final_board = board.copy()
         self.has_final_board = True
 
 
@@ -371,39 +416,43 @@ cdef class MoveGenerator:
     """Static methods for generating legal moves"""
     
     @staticmethod
-    cdef list generate_moves(unsigned char[:, ::1] board, unsigned char d1, unsigned char d2):
+    cdef list generate_moves(np.ndarray[np.uint8_t, ndim=2] board, int player, unsigned char d1, unsigned char d2):
         cdef list all_sequences = []
         cdef unsigned char[2] reverse_dice
         cdef MoveSequence curr_seq
     
         if DEBUG:
-            print(f"Generating moves with dice {d1} {d2} :\n")
-            print("Calling _gen_moves_recuriseve")
+            print(f"Generating moves for player {player} with dice {d1} {d2}")
 
+        # Create initial MoveSequence with dice
+        curr_seq = MoveSequence()
+        curr_seq.dice[0] = d1
+        curr_seq.dice[1] = d2
         
-        #This covers doubles and first order non-double
+        # Generate moves with dice in original order
         MoveGenerator._generate_moves_recursive(
             board,
+            player,
             0,
             d1,
             d2,
-            MoveSequence([d1, d2]),
+            curr_seq,
             all_sequences
         )
-        if DEBUG:
-            print("Returned from _gen_moves_recursive")
 
+        # For non-doubles, try reverse dice order
         if d1 != d2:
-            # this changes the order of 2 die
-            reverse_dice[0] = d2
-            reverse_dice[1] = d1
+            curr_seq = MoveSequence()
+            curr_seq.dice[0] = d2
+            curr_seq.dice[1] = d1
 
             MoveGenerator._generate_moves_recursive(
                 board,
+                player,
                 0,
                 d2,
                 d1,
-                MoveSequence(reverse_dice),
+                curr_seq,
                 all_sequences
             )
         
@@ -411,7 +460,8 @@ cdef class MoveGenerator:
     
     @staticmethod
     cdef void _generate_moves_recursive(
-        unsigned char[:, ::1] board,
+        np.ndarray[np.uint8_t, ndim=2] board,
+        int player,
         unsigned char move_num,
         unsigned char d1,
         unsigned char d2,
@@ -420,121 +470,130 @@ cdef class MoveGenerator:
     ):
         cdef int src
         cdef Move move
-        cdef unsigned char[:, ::1] new_board
+        cdef np.ndarray[np.uint8_t, ndim=2] new_board
         cdef unsigned char die_value
-        cdef bint found_one_board = False
+        cdef bint found_valid_move = False
         cdef MoveSequence new_sequence
         cdef bint isDouble = curr_sequence.dice[0] == curr_sequence.dice[1]
+
+        move.src = 0
+        move.n = 0
         
         if DEBUG:
-            print(f"_gen_moves Move number: {move_num}, Die value: {curr_sequence.dice}, Current moves: {curr_sequence.moves}")
-            print(f"Len of all_seq: {len(all_sequences)},")
+            print(f"_gen_moves Move number: {move_num}, Dice: {curr_sequence.dice[0]} {curr_sequence.dice[1]}")
 
+        # Limit recursion depth for safety
         if len(all_sequences) > 1000:
             if DEBUG:
-                print(f"Max sequences hit 1000")
+                print("Max sequences limit reached (1000)")
             return
         
+        # Determine which die to use for this move
         if move_num == 0:
             die_value = d1
         elif move_num == 1:
             die_value = d2
         elif not isDouble and move_num == 2:
-            curr_sequence.set_final_board(board)  # Store final board state
-            all_sequences.append(curr_sequence.copy()) # do we need a copy here?   this should be the final board. 
+            # For non-doubles, end after two moves
+            curr_sequence.set_final_board(board)
+            all_sequences.append(curr_sequence.copy())
             return
         elif isDouble and move_num < 4:
+            # For doubles, allow up to four moves
             die_value = curr_sequence.dice[0]
         elif move_num == 4:
-            curr_sequence.set_final_board(board)  # Store final board state
-            all_sequences.append(curr_sequence.copy()) # do we need a copy here?   this should be the final board. 
+            # End after four moves for doubles
+            curr_sequence.set_final_board(board)
+            all_sequences.append(curr_sequence.copy())
             return
         else:
-            # Debug print statement
             if DEBUG:
-                print(f"Move number: {move_num}, Die value: {die_value}, Current sequence: {curr_sequence}, Board state:\n{board}")
-            
-            #assert False, "Invalid move_num in recursive generation"
+                print(f"Invalid move_num {move_num} in recursive generation")
+            return
         
-        if DEBUG:
-            print(f"_gen_moves Die value: {die_value}, Current moves: {curr_sequence.moves}")
-
-        
-        for src in range(BAR_POS, BEAR_OFF_POS): #BEAROFF is not included
+        # Try all possible source positions
+        for src in range(BAR_POS, BEAR_OFF_POS):
             if BoardState.can_move_pip(board, src, die_value):
                 move.src = src
                 move.n = die_value
                 
-                new_board = np.asarray(board).copy()
+                # Create new board state and apply move
+                new_board = board.copy()
+                
+                if DEBUG:
+                    print(f"new board Applying move: {move.src} {move.n}")
                 BoardState.apply_move(new_board, move)
 
+                # Create new sequence with this move
                 new_sequence = curr_sequence.copy()
                 new_sequence.add_move(move.src, move.n)
                 
+                # Recurse to find subsequent moves
                 MoveGenerator._generate_moves_recursive(
                     new_board,
+                    player,
                     move_num + 1,
                     d1,
                     d2,
                     new_sequence,
                     all_sequences
                 )
-                found_one_board = True
+                found_valid_move = True
         
-        if not found_one_board:
-            # didn't find any other possible moves this may be the end of the sequence we need to save this one
-            # otherwise if more were found then this is an invalid move by definition
-
-            curr_sequence.set_final_board(board)  # Store final board state
-            all_sequences.append(curr_sequence.copy()) # again is a copy necessary? 
+        # If no valid moves found, this might be the end of a sequence
+        if not found_valid_move:
+            curr_sequence.set_final_board(board)
+            all_sequences.append(curr_sequence.copy())
             return
-
     
     @staticmethod
-    cdef bytes _board_to_bytes(unsigned char[:, ::1] board) :
-        # Convert board state to a bytes representation for hashing
-        return bytes(board.tobytes())
+    cdef bytes _board_to_bytes(np.ndarray[np.uint8_t, ndim=2] board): 
+        """Convert board state to bytes for hashing"""
+        return board.tobytes()
 
     @staticmethod
     cdef list _filter_moves(list sequences):
+        """Filter move sequences to remove duplicates and ensure maximum move usage"""
         if not sequences:
             return []
             
-        # First filter by maximum moves used
+        # Find maximum number of moves used
         cdef int max_die
         cdef int max_moves = max(seq.n_moves for seq in sequences)
         cdef set unique_states = set()
         cdef list unique_sequences = []
-        cdef list sequences2 = []
+        cdef list filtered_sequences = []
         cdef bytes board_hash
         cdef MoveSequence seq
         
-        #filters sequences with less than max moves
-        sequences = [seq for seq in sequences if seq.n_moves == max_moves]
-        
-        #filter sequences with less than max die if only 1 move possible.
+        # Keep only sequences with maximum number of moves
+        max_die = 0
+
+        filtered_sequences = []
+        for seq in sequences:
+            if seq.n_moves == max_moves:
+                filtered_sequences.append(seq)
+                if max_moves == 1:
+                    if seq.moves[0].n > max_die:
+                        max_die = seq.moves[0].n
+        sequences = filtered_sequences
+        # For single moves, prefer higher die values
         if max_moves == 1:
-            max_die = 0
-            for seq in sequences:
-                if seq.moves[0].n > max_die:
-                    max_die = seq.moves[0].n
             
+            filtered_sequences = []
             for seq in sequences:
                 if seq.moves[0].n == max_die:
-                    sequences2.append(seq)
+                    filtered_sequences.append(seq)
+
+            sequences = filtered_sequences
         
-        # Filter duplicates using the stored final board states
-        
-        
+        # Filter duplicates based on final board state
         for seq in sequences:
             if not seq.has_final_board:
-                assert False, "Sequence does not have final board state"
+                raise ValueError("Sequence missing final board state")
             
-            # Get hashable representation of stored final board state
-            board_arr = np.asarray(seq.final_board)
-            board_hash = board_arr.tobytes()
+            board_hash = MoveGenerator._board_to_bytes(seq.final_board)
             
-            # Only keep sequence if board state is unique
             if board_hash not in unique_states:
                 unique_states.add(board_hash)
                 unique_sequences.append(seq)
