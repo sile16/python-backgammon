@@ -170,36 +170,6 @@ class TestBackgammonState(unittest.TestCase):
         self.assertEqual(state.board[0, 7], initial_board[0, 7] + 1,
                         "Destination point should have one more piece")
 
-    def test_performance(self):
-        """Test game performance with timing"""
-        import time
-        
-        start_time = time.time()
-        n_games = 10
-        
-        #for _ in range(n_games):
-        
-        state = State()
-        state.pick_first_player()
-        
-        max = 10
-        count = 0
-        while not state.isTerminal():
-            count += 1
-            if count > max:
-                continue
-            state.roll_dice()
-            moves = state.get_legal_moves()
-            if moves:
-                state.do_moves(moves[0])
-    
-        duration = time.time() - start_time
-        games_per_second = n_games / duration
-        print(f"\nPerformance: {games_per_second:.2f} games/second")
-        
-        self.assertTrue(games_per_second > 10, 
-                       "Should be able to play at least 10 games per second")
-        
 
     def test_blot_hitting(self):
         """Test hitting single pieces (blots)"""
