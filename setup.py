@@ -5,9 +5,11 @@ import os
 
 # Set the build directory
 build_dir = "build"
+cython_output_dir = os.path.join(build_dir, "cythonized")  # Where generated C files will be placed
 
-# Ensure build directory exists
+# Ensure build directories exist
 os.makedirs(build_dir, exist_ok=True)
+os.makedirs(cython_output_dir, exist_ok=True)
 
 extensions = [
     Extension(
@@ -42,7 +44,8 @@ setup(
         compiler_directives={
             "language_level": "3",
             "binding": True,
-        }
+        },
+        output_dir=cython_output_dir  # This ensures C files go into the build directory
     ),
     include_dirs=[np.get_include()],
     options={

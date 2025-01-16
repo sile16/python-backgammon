@@ -2,15 +2,19 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from bg_common cimport *
+from bg_board cimport BoardState
+
+#import type list
+
 
 
 cdef class MoveSequence:
-    cdef:
-        public Move[4] moves
-        public unsigned char[2] dice
-        public unsigned char n_moves
-        public np.ndarray final_board
-        public bint has_final_board
+    #cdef:
+    #    public Move[4] moves
+    #    public unsigned char[2] dice
+    #    public unsigned char n_moves
+    #    public np.ndarray final_board
+    #    public bint has_final_board
 
     def __cinit__(self, dice=None):
         self.n_moves = 0

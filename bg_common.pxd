@@ -1,6 +1,7 @@
 cdef bint DEBUG
 
 cdef enum:
+    BAR_POS = 0
     HOME_START_POS = 18
     HOME_END_POS = 24
     BEAR_OFF_POS = 25

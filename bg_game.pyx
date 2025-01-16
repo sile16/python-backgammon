@@ -4,7 +4,7 @@
 
 # Define NPY_NO_DEPRECATED_API to silence warnings
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
-#import numpy as np
+import numpy as np
 cimport numpy as np
 cimport cython
 from libc.stdlib cimport rand, RAND_MAX, srand

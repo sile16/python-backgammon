@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from state import set_debug, get_debug, set_random_seed, State
+from bg_game import set_debug, get_debug, set_random_seed, BGGame
 
 # Constants for player colors
 WHITE = 0
@@ -11,7 +11,7 @@ NONE = 2
 @pytest.fixture
 def default_state():
     """Fixture to initialize the default game state."""
-    return State()
+    return BGGame()
 
 # Debug Mode Tests
 def test_set_debug():
@@ -24,7 +24,7 @@ def test_set_debug():
 # Random Seed Tests
 def test_set_random_seed():
 
-    state = State()
+    state = BGGame()
     
     set_random_seed(42)
     state.roll_dice()
@@ -45,7 +45,7 @@ def test_state_initialization(default_state):
 # Dice Roll Operations
 def test_dice_roll():
     """Verify dice roll logic."""
-    state = State()
+    state = BGGame()
     state.roll_dice()
     dice = b'\x02\x05'
     state.set_dice(dice)

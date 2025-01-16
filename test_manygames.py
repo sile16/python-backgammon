@@ -1,7 +1,8 @@
 import time
 import numpy as np
 from tqdm import tqdm
-from state import State, set_debug, set_random_seed, MoveSequence
+from bg_game import BGGame, set_debug, set_random_seed
+from bg_move import MoveSequence
 import multiprocessing as mp
 from multiprocessing import Manager
 import os
@@ -77,7 +78,7 @@ def print_summary_statistics(stats, duration, n_games):
 def play_single_game():
     """Play a single game and return statistics"""
     stats = initialize_stats()
-    state = State()
+    state = BGGame()
     state.pick_first_player()
     set_debug(False)
     
