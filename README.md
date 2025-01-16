@@ -1,6 +1,8 @@
 # python-backgammon
 
-Forked from: https://github.com/Tracing/python-backgammon
+Forked from: https://github.com/Tracing/python-backgammon 
+
+but pretty much re-wrote every function. 
 
 A game of Backgammon programmed in python with AI.
 

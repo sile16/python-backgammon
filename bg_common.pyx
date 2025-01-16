@@ -1,0 +1,1 @@
+cdef bint DEBUG = False
