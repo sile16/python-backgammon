@@ -190,8 +190,13 @@ def test_no_valid_moves(default_state):
     valid_moves = default_state.get_legal_moves()
     valid_moves2 = default_state.get_legal_moves2()
 
-    assert valid_moves == []
-    assert valid_moves2 == []
+    assert len(valid_moves) == 1
+    assert len(valid_moves) == 1
+
+    assert valid_moves[0].n_moves == 0
+    assert valid_moves2[0].n_moves == 0
+    assert valid_moves[0].moves[0]['n'] == 0
+    assert valid_moves2[0].moves[0]['n'] == 0
 
 # Boundary Conditions
 def test_bar_and_bear_off_logic(default_state):
@@ -354,12 +359,12 @@ def test_many_games(default_state):
             moves = default_state.get_legal_moves2()
             moves2 = default_state.get_legal_moves()
             assert(len(moves) == len(moves2))
-            if len(moves) > 0:
-                move = moves[np.random.randint(len(moves))]
-                #print(f"applying dice roll {move.dice}")
-                default_state.do_moves(move)
-            else:
-                default_state.do_moves(None)
+            
+            move = moves[np.random.randint(len(moves))]
+            
+            #print(f"applying dice roll {move.dice}")
+            default_state.do_moves(move)
+         
         
             
             

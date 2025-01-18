@@ -290,7 +290,11 @@ cdef class MoveGenerator:
             )
 
         #print(f"Returning from generate_moves, total all_sequences: {len(all_sequences)}")
-        
+        if len(all_sequences) == 0:
+            all_sequences.append(MoveSequence())
+            #print(f"going to return empty sequence: {len(all_sequences)}")
+            return all_sequences
+
         return MoveGenerator._filter_moves(all_sequences)
         
 
@@ -447,6 +451,7 @@ cdef class MoveGenerator:
                 unique_states.add(board_hash)
                 unique_sequences.append(seq)
         
+        #print(f"Returning from generate_moves, total all_sequences: {len(unique_sequences)}")
         return unique_sequences
 
 
@@ -472,6 +477,9 @@ cdef class MoveGenerator:
             &max_die
         )
         #print(f"Returning from generate_moves2, total all_sequences: {len(all_sequences)} max_moves: {max_moves} max_die: {max_die}")
+        if len(all_sequences) == 0:
+            all_sequences.append(MoveSequence())
+            return all_sequences
         return MoveGenerator._filter_moves2(all_sequences, max_moves, max_die)
 
     @staticmethod

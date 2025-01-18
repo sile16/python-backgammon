@@ -101,24 +101,10 @@ def play_single_game():
             mlen = len(moves)
             
             max_moves = max(max_moves, mlen)
+            move_index = np.random.randint(mlen)
+            state.do_moves(moves[move_index])
             
-            if mlen > 0:
-                no_moves_found = 0
-                move_index = np.random.randint(mlen)
-                if move_index < len(moves):
-                    state.do_moves(moves[move_index])
-                else:
-                    raise ValueError(f"Invalid move index: {move_index}")
-            else:
-                no_moves_found += 1
-                if no_moves_found > 20:
-                    print("Error: Invalid board state, overlapping pieces")
-                    
-                    print_state(state)
-                    raise ValueError("Error: Invalid board state, overlapping pieces")
-                state.do_moves(None) # this switches the player
-            
-            
+           
             if state.isTerminal():
                 update_statistics(stats, state.winner, state.points, max_moves)
                 return stats
