@@ -169,22 +169,37 @@ cdef class BGGame:
             # Print dice in decimal format
             print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: [{self.dice[0]}, {self.dice[1]}]")
             
-        return MoveGenerator.generate_moves(self.board_curr, self.player, self.dice[0], self.dice[1])
+        return MoveGenerator.generate_moves(self.board_curr, self.dice[0], self.dice[1])
+
+    cpdef list get_legal_moves2(self):
+        if self.player == NONE:
+            raise ValueError("Error player is not set yet")
+
+        if not self.is_dice_valid():
+            raise ValueError(f"Error Dice not valid: dice: {self.dice}")
+        
+        if DEBUG:
+            # Print dice in decimal format
+            print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: [{self.dice[0]}, {self.dice[1]}]")
+            
+        return MoveGenerator.generate_moves2(self.board_curr, self.dice[0], self.dice[1])
+    
     
     cpdef void do_moves(self, MoveSequence moveSeq):
         cdef int i
 
-        assert self.player != NONE, "Player must be set before making moves"
+        if self.player == NONE:
+            raise ValueError("Player must be set before making moves")
         
         if moveSeq:
             self.move_seq_list.append(moveSeq.copy())
+            #print(f"Applying Move Seq {self.player} MoveSeq: {moveSeq.dice[0]} {moveSeq.dice[1]}")
             for i in range(moveSeq.n_moves):
                 
-                if DEBUG:
-                    BoardState.sanity_checks(self.board)
-                    if not BoardState.can_move_pip(self.board_curr, moveSeq.moves[i].src, moveSeq.moves[i].n):
-                        print(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}")
-                        raise ValueError(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}" )        
+                BoardState.sanity_checks(self.board)
+                if not BoardState.can_move_pip(self.board_curr, moveSeq.moves[i].src, moveSeq.moves[i].n):
+                    #print(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}")
+                    raise ValueError(f"Invalid move: {moveSeq.moves[i].src} {moveSeq.moves[i].n}" )        
             
                 BoardState.apply_move(self.board_curr, moveSeq.moves[i])
 

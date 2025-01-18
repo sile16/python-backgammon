@@ -28,6 +28,9 @@ cdef class BoardState:
         # Must have a piece to move
         if board[0, src] == 0:
             return False
+        
+        if src > 24:
+            raise ValueError("Invalid src position for a move")
             
         dst = src + n
         
@@ -58,6 +61,15 @@ cdef class BoardState:
             print(f"Board state:\n{board}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
             print(np.array_str(board, precision=2, suppress_small=True))
+
+        if board[0, move.src] == 0:
+            raise ValueError("Error: No piece to move")
+
+        if board[0, BAR_POS] > 0 and move.src != BAR_POS:
+            raise ValueError("Error: Must move from bar first")
+        
+        if move.src > 24:
+            raise ValueError("Invalid src position for a move")
         
         # Move piece from source to destination
         board[0, move.src] -= 1
@@ -90,6 +102,12 @@ cdef class BoardState:
         for i in range(26):
             sum_white += board[0, i]
             sum_black += board[1, i]
+
+            if board[0,i] > 15 or board[1,i] > 15:
+                print(f"Board state:\n{board}")
+                print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+                print(np.array_str(board, precision=2, suppress_small=True))
+                raise ValueError("Error: Invalid board state, piece count > 15")
         
         if sum_white != 15 or sum_black != 15:
             #print sums:
@@ -106,3 +124,11 @@ cdef class BoardState:
                 print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
                 print(np.array_str(board, precision=2, suppress_small=True))
                 raise ValueError("Error: Invalid board state, overlapping pieces")
+
+        # WRONG: Only 1 player should have pieces on the bar
+        # this is wrong, both players can have pieces on the, the move OFF a bar, could hit an opponent
+        # if board[0, BAR_POS] > 0 and board[1, OPP_BAR_POS] > 0:
+        #    print(f"Board state:\n{board}")
+        #    print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+        #    print(np.array_str(board, precision=2, suppress_small=True))
+        #    raise ValueError("Error: Invalid board state, both players have pieces on the bar")

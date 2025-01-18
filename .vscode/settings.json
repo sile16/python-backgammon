@@ -3,6 +3,15 @@
         "."
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+
+    
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/build/lib"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/build/lib"
+    ]
+    
 
 }

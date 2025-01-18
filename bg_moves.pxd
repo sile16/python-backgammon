@@ -17,12 +17,11 @@ cdef class MoveSequence:
 
 cdef class MoveGenerator:
     @staticmethod
-    cdef list generate_moves(np.ndarray[np.uint8_t, ndim=2] board, int player, unsigned char d1, unsigned char d2)
+    cdef list generate_moves(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2)
     
     @staticmethod
     cdef void _generate_moves_recursive(
         np.ndarray[np.uint8_t, ndim=2] board,
-        int player,
         unsigned char move_num,
         unsigned char d1,
         unsigned char d2,
@@ -35,3 +34,21 @@ cdef class MoveGenerator:
 
     @staticmethod
     cdef bytes _board_to_bytes(np.ndarray[np.uint8_t, ndim=2] board)
+
+    @staticmethod
+    cdef list generate_moves2(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2)
+
+    @staticmethod
+    cdef void _generate_moves_iterative(
+        np.ndarray[np.uint8_t, ndim=2] board,
+        unsigned char d1,
+        unsigned char d2,
+        list all_sequences,
+        unsigned char* max_moves_ptr,
+        unsigned char* max_die_ptr
+    )
+
+    @staticmethod
+    cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die)
+
+

@@ -1,11 +1,20 @@
 import time
 import numpy as np
 from tqdm import tqdm
-from bg_game import BGGame, set_debug, set_random_seed
-from bg_move import MoveSequence
 import multiprocessing as mp
 from multiprocessing import Manager
 import os
+import sys
+
+# Get the absolute path to the project root
+project_root = os.path.dirname(os.path.abspath(__file__))
+
+# Add the build/lib directory to Python's path
+build_lib_dir = os.path.join(project_root, 'build', 'lib')
+if build_lib_dir not in sys.path:
+    sys.path.insert(0, build_lib_dir)
+
+from bg_game import BGGame, set_debug
 
 def initialize_stats():
     """Initialize statistics counters with default values"""
@@ -83,19 +92,32 @@ def play_single_game():
     set_debug(False)
     
     max_moves = 0
+    no_moves_found = 0
     
     while not state.isTerminal():
         try:
             state.roll_dice()
-            moves = state.get_legal_moves()
+            moves = state.get_legal_moves2()
             mlen = len(moves)
             
             max_moves = max(max_moves, mlen)
             
             if mlen > 0:
+                no_moves_found = 0
                 move_index = np.random.randint(mlen)
                 if move_index < len(moves):
                     state.do_moves(moves[move_index])
+                else:
+                    raise ValueError(f"Invalid move index: {move_index}")
+            else:
+                no_moves_found += 1
+                if no_moves_found > 20:
+                    print("Error: Invalid board state, overlapping pieces")
+                    
+                    print_state(state)
+                    raise ValueError("Error: Invalid board state, overlapping pieces")
+                state.do_moves(None) # this switches the player
+            
             
             if state.isTerminal():
                 update_statistics(stats, state.winner, state.points, max_moves)
@@ -106,6 +128,18 @@ def play_single_game():
             return None
     
     return stats
+
+def print_state(state):
+    for ms in state.move_seq_list:
+        print(f"Dice {ms.dice[0]} {ms.dice[1]}")
+        print(f"Board state:\n{ms}")
+        print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+        print(np.array_str(ms.final_board, precision=2, suppress_small=True))
+    
+    print(f"Current Roll: {state.dice[0]} {state.dice[1]}")
+    print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
+    print(np.array_str(state.board, precision=2, suppress_small=True))
+    
 
 def worker(n_games, result_queue, process_id, progress_queue):
     """Worker process function"""
@@ -175,5 +209,5 @@ def run_games(n_games):
         print_summary_statistics(final_stats, duration, n_games)
 
 if __name__ == "__main__":
-    N_GAMES = 5000  # Increased number of games to better utilize multiple cores
+    N_GAMES = 50000  # Increased number of games to better utilize multiple cores
     run_games(N_GAMES)
