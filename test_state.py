@@ -289,6 +289,22 @@ def test_both_players_on_bar(default_state):
     moves2 = default_state.get_legal_moves2()
     assert len(moves) == len(moves2)
 
+def test_dice_index(default_state):
+    for d1 in range(1, 7):
+        for d2 in range(1, 7):
+            i = default_state.diceToIndex(d1, d2)
+            new_dice = default_state.indexToDice(i)
+            assert d1 in new_dice
+            assert d2 in new_dice
+
+def test_get_all_moves_all_dice(default_state):
+    default_state.set_player(WHITE)
+    default_state.set_dice((3, 4))
+    moves = default_state.get_all_moves_all_dice()
+    assert len(moves) == 21
+    
+
+
 
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""

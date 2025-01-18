@@ -183,6 +183,18 @@ cdef class BGGame:
             print(f"Player: {self.player} Valid Dice: {self.is_dice_valid()} Dice: [{self.dice[0]}, {self.dice[1]}]")
             
         return MoveGenerator.generate_moves2(self.board_curr, self.dice[0], self.dice[1])
+
+    cpdef list get_all_moves_all_dice(self):
+        cdef list allDiceMoves = []
+
+        if self.player == NONE:
+            raise ValueError("Error player is not set yet")
+
+        for i in range(21):
+            dice = self.indexToDice(i)
+            allDiceMoves.append(MoveGenerator.generate_moves2(self.board_curr, dice[0], dice[1]))
+        
+        return allDiceMoves
     
     
     cpdef void do_moves(self, MoveSequence moveSeq):
@@ -250,3 +262,30 @@ cdef class BGGame:
             self.roll_dice()
         return self.winner
 
+    cpdef tuple indexToDice(self, unsigned char index):
+        cdef list diceLookup = [(1,1), (1,2), (1,3), (1,4), (1,5), (1,6),
+                            (2,2), (2,3), (2,4), (2,5), (2,6),
+                            (3,3), (3,4), (3,5), (3,6),
+                            (4,4), (4,5), (4,6), 
+                            (5,5), (5,6),
+                            (6,6)]
+        return diceLookup[index]
+
+    cpdef unsigned char diceToIndex(self, unsigned char d1, unsigned char d2):
+        cdef unsigned char* d1_lookup = [0, 0, 6, 11, 15, 18, 20]
+        
+        if d1 > d2:
+            d1, d2 = d2, d1  # Ensure d1 ≤ d2 for proper indexing
+
+        cdef unsigned char d1_offset = d1_lookup[d1]  # Fix indexing issue
+        cdef unsigned char d2_offset = d2 - d1
+
+        return d1_offset + d2_offset
+
+
+
+
+    
+    
+
+   

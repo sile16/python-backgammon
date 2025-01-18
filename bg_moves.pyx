@@ -339,16 +339,16 @@ cdef class MoveGenerator:
 
         
         if d1 > d2:
-            stack.append((board.copy(), MoveSequence([d2, d1]), 0, BAR_POS))
-            stack.append((board.copy(), MoveSequence([d1, d2]), 0, BAR_POS))
+            stack.append((board, MoveSequence([d2, d1]), 0, BAR_POS))
+            stack.append((board, MoveSequence([d1, d2]), 0, BAR_POS))
             
         elif d2 > d1:
-            stack.append((board.copy(), MoveSequence([d1, d2]), 0, BAR_POS))
-            stack.append((board.copy(), MoveSequence([d2, d1]), 0, BAR_POS))
+            stack.append((board, MoveSequence([d1, d2]), 0, BAR_POS))
+            stack.append((board, MoveSequence([d2, d1]), 0, BAR_POS))
             
         else:
             #they are the same
-            stack.append((board.copy(), MoveSequence([d1, d2]), 0, BAR_POS))
+            stack.append((board, MoveSequence([d1, d2]), 0, BAR_POS))
         
         while stack:
             curr_board, curr_seq, move_num, last_src = stack.pop()
@@ -388,7 +388,7 @@ cdef class MoveGenerator:
                             all_sequences.append(new_seq)
                     else:
                         #could be more moves to make put onto the stack
-                        stack.append((new_board.copy(), new_seq, move_num + 1, src))
+                        stack.append((new_board, new_seq, move_num + 1, src))
             
             if not found_valid_move and curr_seq.n_moves > 0:
                 # add in curr sequence as it's now final as no further moves possible
@@ -403,7 +403,7 @@ cdef class MoveGenerator:
                 # filter out moves if they are less than max moves
                 if curr_seq.n_moves >= max_moves_ptr[0]:
                     curr_seq.set_final_board(curr_board)
-                    all_sequences.append(curr_seq.copy())
+                    all_sequences.append(curr_seq)
 
     @staticmethod
     cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die):
@@ -418,15 +418,18 @@ cdef class MoveGenerator:
         cdef bytes board_hash
         cdef MoveSequence seq
 
-        
+        if max_moves == 1:
+            
+            for seq in sequences:
+                if seq.moves[0].n == max_die:
+                    filtered_sequences.append(seq)
+
+            return filtered_sequences
         
         for seq in sequences:
             if seq.n_moves == max_moves:
                 if not seq.has_final_board:
                     raise ValueError("Sequence missing final board state")
-            
-                if max_moves == 1 and seq.moves[0].n < max_die:
-                    pass #continue
                 
                 board_hash = seq.final_board.tobytes()
                 
@@ -435,13 +438,6 @@ cdef class MoveGenerator:
                     filtered_sequences.append(seq)
 
         # For single moves, prefer higher die values
-        if max_moves == 1:
-            
-            filtered_sequences = []
-            for seq in sequences:
-                if seq.moves[0].n == max_die:
-                    filtered_sequences.append(seq)
-
-            sequences = filtered_sequences
+        
         
         return filtered_sequences
