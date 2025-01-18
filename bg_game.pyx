@@ -70,6 +70,19 @@ cdef class BGGame:
     
     def __cinit__(self):
         self.reset()
+
+    cpdef BGGame copy(self):
+        cdef BGGame new_game = BGGame()
+        new_game.board = self.board.copy()
+        new_game.board_curr = self.board_curr.copy()
+        new_game.player = self.player
+        new_game.winner = self.winner
+        new_game.dice[0] = self.dice[0]
+        new_game.dice[1] = self.dice[1]
+        new_game.legal_moves = self.legal_moves.copy()
+        new_game.points = self.points
+        new_game.move_seq_list = self.move_seq_list.copy()
+        return new_game
     
     cpdef int get_move_count(self):
         return len(self.move_seq_list)

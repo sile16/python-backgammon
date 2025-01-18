@@ -3,8 +3,22 @@ cimport numpy as np
 cimport cython
 from bg_common cimport *
 from bg_board cimport BoardState
+from libc.stdint cimport int32_t, uint32_t
 
 #import type list
+
+# Bit-shifting constants
+cdef int FROM_BITS = 5    # 32 positions (0-24 board + bar)
+cdef int DICE_BITS = 3    # 8 possible dice values (1-6 + special cases)
+cdef int MOVE_BITS = 8    # FROM_BITS + DICE_BITS
+
+# Masks for bitwise operations
+cdef uint32_t FROM_MASK = (1 << FROM_BITS) - 1
+cdef uint32_t DICE_MASK = (1 << DICE_BITS) - 1
+cdef uint32_t MOVE_MASK = (1 << MOVE_BITS) - 1
+
+# Special constants
+cdef uint32_t DOUBLE_FLAG = (1 << 30)  # Flag for double moves
 
 cdef class MoveSequence:
 
@@ -43,6 +57,147 @@ cdef class MoveSequence:
             return False
 
         return True
+
+    def __hash__(self):
+        """Python-compatible hash function."""
+        return self._toIndex()
+
+    def toIndex(self):
+        """Encodes a move sequence into a unique 32-bit integer index."""
+        return self._toIndex()
+
+
+    cdef uint32_t _toIndex(self):
+        """Encodes a move sequence into a unique 32-bit integer index."""
+        """Actually could change to 3 bytes to capture all possibilities"""
+        if self.n_moves == 0 or self.n_moves > 4:
+            return 0
+
+        
+
+        cdef uint32_t encoded = 0
+        cdef uint32_t moveVale = 0
+        cdef int i
+        cdef Move move
+        
+        cdef uint32_t die, movesrc
+
+        #print(f"toIndex: moves: {self.moves}")
+
+        # Handle doubles
+        if self.n_moves > 1 and self.moves[0].n == self.moves[1].n:
+            #print("doubles")
+            die = self.moves[0].n
+
+            # Encode each move for doubles
+        
+            for i in range(4):
+                if i < self.n_moves:
+                    move = self.moves[i]
+                    movesrc = move.src
+                else:
+                    movesrc = 25  # impossible source, this indicate no more moves
+                
+                # Shift existing bits and add new move
+                encoded |= ( movesrc & FROM_MASK) << (i * FROM_BITS)
+            
+            # Add dice value and double marker
+            
+            encoded = (encoded << DICE_BITS) | die
+            #print encoded in hex and binar
+            #print(f"encoded: {hex(encoded)} , {bin(encoded)}")
+            encoded |= DOUBLE_FLAG
+            #print("add double flag")
+            #print(f"encoded: {hex(encoded)} , {bin(encoded)}")
+            
+            return encoded
+
+        # Handle regular moves
+        #print("not doubles")
+        
+        for i in range(self.n_moves): 
+            # Validate move
+            move = self.moves[i]
+            if move.src > 24 or move.n > 6 :
+                return 0
+            
+            die = move.n
+            movesrc = move.src
+
+            
+            moveVal = (movesrc << DICE_BITS) | die
+            
+            # Shift and add to encoded value
+            encoded |= moveVal << (i * MOVE_BITS)
+        
+        return encoded
+
+    @staticmethod
+    def toSequenceFromIndex(encoded):
+        """Decodes a uint32_t back into a move sequence."""
+        return MoveSequence._toSequenceFromIndex(encoded)
+    
+    @staticmethod
+    cdef MoveSequence _toSequenceFromIndex(uint32_t encoded):
+        """Decodes a uint32_t back into a move sequence."""
+        
+        # Create an empty move sequence
+        cdef MoveSequence sequence = MoveSequence()
+        cdef int i = 0
+        cdef uint32_t dice, movesCount, moveVal, from_pos, dice_val
+        cdef Move move
+        
+        # Check if it's a double move, print the hex valu and binary
+        #print(f"checking for doubles {hex(encoded)} , {bin(encoded)}, {bin(DOUBLE_FLAG)}")
+        if encoded & DOUBLE_FLAG != 0:
+            #print("doubles")
+            # Remove the double offset flag
+            encoded &= ~DOUBLE_FLAG  # Clear the double flag
+
+            # Extract dice value
+            dice = encoded & DICE_MASK
+            #print(f"dice: {dice}")
+            if dice == 0:
+                return sequence  # Invalid dice value
+
+            encoded >>= DICE_BITS  # Shift right to remove dice
+
+            # Extract moves
+            
+            for i in range(4):
+                from_pos = encoded & FROM_MASK
+                #print(f"from_pos: {from_pos}")
+                encoded >>= FROM_BITS
+                
+                if from_pos == 25:
+                    break
+                    
+                sequence.add_move(from_pos, dice)
+
+                if i < len(sequence.dice):
+                    sequence.dice[i] = dice
+
+            return sequence
+        #print("Not doubles")
+
+        # Handle regular moves
+        movesCount = 0
+        while encoded > 0 and movesCount < 4:
+            moveVal = encoded & MOVE_MASK
+            from_pos = (moveVal >> DICE_BITS) & FROM_MASK
+            dice_val = moveVal & DICE_MASK
+
+            #move = Move()
+            #move.src = from_pos
+            #move.n = dice_val
+            sequence.add_move(from_pos, dice_val)
+            if i < len(sequence.dice):
+                sequence.dice[i] = dice_val
+
+            encoded >>= MOVE_BITS
+            movesCount += 1
+
+        return sequence
 
     cpdef list get_moves_tuple(self):
         """Return a list of move tuples (src, n)"""

@@ -13,6 +13,7 @@ if build_lib_dir not in sys.path:
 
 
 from bg_game import set_debug, get_debug, set_random_seed, BGGame
+from bg_moves import MoveSequence
 
 # Constants for player colors
 WHITE = 0
@@ -53,6 +54,43 @@ def test_set_random_seed():
     d2 = state.dice
 
     assert d1 != d2
+
+def test_move_sequence_encode_decode():
+
+    ms = MoveSequence()
+
+    i1 = ms.toIndex()
+    assert i1 == 0
+
+    ms2 = MoveSequence.toSequenceFromIndex(0)
+    assert ms == ms2
+
+
+    for i in range(100):
+        ms.n_moves = 0
+
+        for j in range(np.random.randint(1, 3)):
+            ms.add_move(  np.random.randint(0, 25), np.random.randint(1, 7) )
+        
+        i1 = ms.toIndex()
+        ms2 = MoveSequence.toSequenceFromIndex(i1)
+        i2 = ms2.toIndex()
+        assert(i1 == i2)
+        assert(ms == ms2)
+
+        
+        for i in range(1, 7):
+            ms.n_moves = 0
+            for j in range(np.random.randint(1, 5)):  #number of rolls
+                src = np.random.randint(0, 25)
+                ms.add_move(src, i)
+        
+            i1 = ms.toIndex()
+            ms2 = MoveSequence.toSequenceFromIndex(i1)
+            i2 = ms2.toIndex()
+            assert(i1 == i2)
+            assert(ms == ms2)
+        
 
 def test_randomness():
     # run a bunch of dice rolls and make sure they are not all the same
@@ -143,7 +181,7 @@ def test_largest_die(default_state):
 # Edge Case Tests
 def test_no_valid_moves(default_state):
     """Test a board state where no moves are possible."""
-    set_debug(True)
+    #set_debug(True)
     default_state.set_player(WHITE)
     default_state.board[0, :] = 0  # Empty white's board
     default_state.board[0, 0] = 15  # Place all checkers on the bar
@@ -303,8 +341,6 @@ def test_get_all_moves_all_dice(default_state):
     moves = default_state.get_all_moves_all_dice()
     assert len(moves) == 21
     
-
-
 
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""

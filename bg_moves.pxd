@@ -1,5 +1,6 @@
 cimport numpy as np
 from bg_common cimport *
+from libc.stdint cimport int32_t, uint32_t
 
 cdef class MoveSequence:
     cdef public Move[4] moves
@@ -14,6 +15,14 @@ cdef class MoveSequence:
     cpdef MoveSequence add_move_o(self, Move move)
     cdef MoveSequence copy(self)
     cdef void set_final_board(self, np.ndarray[np.uint8_t, ndim=2] board)
+    #def __hash__(self)
+    cdef public uint32_t _toIndex(self)
+
+    @staticmethod
+    #def toSequenceFromIndex(encoded)
+    
+    @staticmethod
+    cdef MoveSequence _toSequenceFromIndex(uint32_t encoded)
 
 cdef class MoveGenerator:
     @staticmethod
