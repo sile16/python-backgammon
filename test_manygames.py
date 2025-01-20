@@ -89,6 +89,7 @@ def play_single_game():
     stats = initialize_stats()
     state = BGGame()
     state.pick_first_player()
+    state.roll_dice()
     set_debug(False)
     
     max_moves = 0
@@ -96,16 +97,19 @@ def play_single_game():
     
     while not state.isTerminal():
         try:
-            state.roll_dice()
-            moves = state.get_legal_moves2()
-            mlen = len(moves)
             
-            max_moves = max(max_moves, mlen)
-            move_index = np.random.randint(mlen)
-            state.do_moves(moves[move_index])
+            #moves = state.get_legal_moves2()
+            #mlen = len(moves)
             
+            #max_moves = max(max_moves, mlen)
+            #move_index = np.random.randint(mlen)
+            #state.do_moves(moves[move_index])
+            moves = state.legal_actions()
+            max_moves = max(max_moves, len(moves))
+            move_index = np.random.randint(len(moves))
+            obs, reward, done = state.step(moves[move_index])
            
-            if state.isTerminal():
+            if done:
                 update_statistics(stats, state.winner, state.points, max_moves)
                 return stats
                 
