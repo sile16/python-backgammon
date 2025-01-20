@@ -25,10 +25,14 @@ cdef class MoveSequence:
     def __cinit__(self, dice=None):
         self.n_moves = 0
         self.has_final_board = False
-        self.dice = [0, 0]
+        self.dice[0] = 0
+        self.dice[1] = 0
         if dice is not None:
             self.dice[0] = dice[0]
             self.dice[1] = dice[1]
+        self.n_used_moves = 0
+
+        
 
     # implement compare function, so we can do movesequence1 == movesequence2
     # Implement compare function
@@ -62,10 +66,15 @@ cdef class MoveSequence:
         """Python-compatible hash function."""
         return self._toIndex()
 
+    #def __toString__(self):
+    #    output = "MoveSeq moves: "
+    #    for m in min(range(self.n_moves), len(self.moves)):
+    #        output += f"[{self.moves[m].src}, {self.moves[m].n}]"
+    #    return output
+
     def toIndex(self):
         """Encodes a move sequence into a unique 32-bit integer index."""
         return self._toIndex()
-
 
     cdef uint32_t _toIndex(self):
         """Encodes a move sequence into a unique 32-bit integer index."""
@@ -207,9 +216,9 @@ cdef class MoveSequence:
             result.append((self.moves[i].src, self.moves[i].n))
         return result
 
-    cdef Move* get_moves(self):
-        """Return a pointer to the moves array"""
-        return &self.moves[0]
+    #cdef unsigned char[4] get_moves(self):
+    #    """Return a pointer to the moves array"""
+    #    return self.moves
     
     cpdef MoveSequence add_move(self, unsigned char src, unsigned char n):
         if self.n_moves < 4:
@@ -217,6 +226,23 @@ cdef class MoveSequence:
             self.moves[self.n_moves].n = n
             self.n_moves += 1
         return self
+
+    cdef int use_move(self, unsigned char src, unsigned char n):
+        """ removes move the first position """
+
+        if self.n_moves == 0:
+            raise ValueError("No moves to use")
+        if self.moves[0].n != n or self.moves[0].src != src:
+            raise ValueError("Move does not match first move in sequence")
+        
+        for i in range(0, self.n_moves - 1):
+            self.moves[i] = self.moves[i + 1]
+            self.n_moves -= 1
+
+        self.used_moves[self.n_used_moves].src = src
+        self.used_moves[self.n_used_moves].n = n
+        self.n_used_moves += 1
+        return self.n_moves
 
     cpdef MoveSequence add_move_o(self, Move move):
         if self.n_moves < 4:
@@ -229,6 +255,9 @@ cdef class MoveSequence:
         cdef int i
         for i in range(self.n_moves):
             new_seq.add_move(self.moves[i].src, self.moves[i].n)
+
+        for i in range(self.n_used_moves):
+            new_seq.used_moves[i] = self.used_moves[i]
         
         if self.has_final_board:
             new_seq.set_final_board(self.final_board)
@@ -480,7 +509,33 @@ cdef class MoveGenerator:
         if len(all_sequences) == 0:
             all_sequences.append(MoveSequence())
             return all_sequences
-        return MoveGenerator._filter_moves2(all_sequences, max_moves, max_die)
+
+        return MoveGenerator._filter_moves2(all_sequences, max_moves, max_die, True)
+
+    @staticmethod
+    cdef list generate_moves3(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2):
+        
+        cdef list all_sequences = []
+        cdef unsigned char max_moves = 0
+        cdef unsigned char max_die = 0
+        
+        if DEBUG:
+            print(f"Generating moves with dice {d1} {d2}")
+        #print(f"Generating moves with dice {d1} {d2}")
+
+        # Create initial MoveSequence with dice ordered (higher die first)
+        
+        MoveGenerator._generate_moves_iterative(
+            board,
+            d1,
+            d2,
+            all_sequences,
+            &max_moves,
+            &max_die
+        )
+        #print(f"Returning from generate_moves2, total all_sequences: {len(all_sequences)} max_moves: {max_moves} max_die: {max_die}")
+        
+        return MoveGenerator._filter_moves2(all_sequences, max_moves, max_die, False)
 
     @staticmethod
     cdef void _generate_moves_iterative(
@@ -569,7 +624,8 @@ cdef class MoveGenerator:
                     all_sequences.append(curr_seq)
 
     @staticmethod
-    cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die):
+    cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die, bint filter):
+
         
         #print(f"Prefilter list length: {len(sequences)} max_moves: {max_moves} max_die: {max_die}")
         
@@ -582,25 +638,29 @@ cdef class MoveGenerator:
         cdef MoveSequence seq
 
         if max_moves == 1:
-            
+            # checks for max die requirement
             for seq in sequences:
                 if seq.moves[0].n == max_die:
                     filtered_sequences.append(seq)
 
             return filtered_sequences
         
+        
         for seq in sequences:
+            # this filters only moves which are max_moves
             if seq.n_moves == max_moves:
                 if not seq.has_final_board:
                     raise ValueError("Sequence missing final board state")
                 
-                board_hash = seq.final_board.tobytes()
-                
-                if board_hash not in unique_states:
-                    unique_states.add(board_hash)
+                if filter:
+                    board_hash = seq.final_board.tobytes()
+                    if  board_hash not in unique_states:
+                        unique_states.add(board_hash)
+                        filtered_sequences.append(seq)
+                else:
+                    # even if the end board in the same we want to keep all possible move seq as they could be different
+                    # for when doing indidivual pip moving
                     filtered_sequences.append(seq)
-
-        # For single moves, prefer higher die values
         
         
         return filtered_sequences

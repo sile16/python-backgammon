@@ -4,19 +4,21 @@ from libc.stdint cimport int32_t, uint32_t
 
 cdef class MoveSequence:
     cdef public Move[4] moves
+    cdef public Move[4] used_moves
     cdef public unsigned char[2] dice
     cdef public unsigned char n_moves
+    cdef public unsigned char n_used_moves
     cdef public np.ndarray final_board
     cdef public bint has_final_board
 
     cpdef list get_moves_tuple(self)
-    cdef Move* get_moves(self)
     cpdef MoveSequence add_move(self, unsigned char src, unsigned char n)
     cpdef MoveSequence add_move_o(self, Move move)
     cdef MoveSequence copy(self)
     cdef void set_final_board(self, np.ndarray[np.uint8_t, ndim=2] board)
     #def __hash__(self)
     cdef public uint32_t _toIndex(self)
+    cdef int use_move(self, unsigned char src, unsigned char n)
 
     @staticmethod
     #def toSequenceFromIndex(encoded)
@@ -45,8 +47,11 @@ cdef class MoveGenerator:
     cdef bytes _board_to_bytes(np.ndarray[np.uint8_t, ndim=2] board)
 
     @staticmethod
-    cdef list generate_moves2(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2)
-
+    cdef list generate_moves2(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2 )
+    
+    @staticmethod
+    cdef list generate_moves3(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2 )
+    
     @staticmethod
     cdef void _generate_moves_iterative(
         np.ndarray[np.uint8_t, ndim=2] board,
@@ -58,6 +63,6 @@ cdef class MoveGenerator:
     )
 
     @staticmethod
-    cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die)
+    cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die, bint filter)
 
 
