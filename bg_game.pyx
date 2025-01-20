@@ -117,7 +117,7 @@ cdef class BGGame:
         
         # No legal moves so change player and roll_dice
         if len(self.legal_moves) == 0:
-            print(f"No existing legal moves chaning player")
+            #print(f"No existing legal moves chaning player")
             self.set_player(1 - self.player)
             self.roll_dice()
             self.update_state()
@@ -126,7 +126,7 @@ cdef class BGGame:
         #because you always have to play max moves, all moves sequences should be the same lenght
         #so we should look at the first one
         self.n_legal_remaining_dice = self.legal_moves[0].n_moves
-        print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
+        #print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
 
         # if only one move left then this is the last move
         if self.n_legal_remaining_dice == 1:
@@ -138,12 +138,12 @@ cdef class BGGame:
         # find all moves, 
         for mSeq in self.legal_moves:
             
-            print(f"mSeq: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.remaining_dice}")
+            #print(f"mSeq: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.remaining_dice}")
             num = mSeq.moves[0]['src'] # 0 based index
             if mSeq.moves[0]['n'] == self.remaining_dice[0]:
                 moves_as_int.add(num)
             elif mSeq.moves[0]['n'] == self.remaining_dice[1]:
-                moves_as_int.add(num + 24)
+                moves_as_int.add(num + 25)
             else:
                 # we found a move that should have been filtered
                 raise ValueError(f"Invalid move 777: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.n_legal_remaining_dice}")
@@ -182,24 +182,29 @@ cdef class BGGame:
 
     cpdef tuple step(self, int action):
         """
-        action 0-23 is move src position 0-23 dice0 moves
-        action 24-47 is move src position 0-23 dice1 moves
+        action 0-24 is move src position 0-24 dice0 moves
+        action 25-49 is move src position 0-24 dice1 moves
         applies move and then changes turn and rolls dice if turn is complete
         """
         cdef Move m
         cdef int dice_using = 0
-        print(f"Step action: {action if action < 24 else action - 24 }  dice: {self.remaining_dice} n_legal_moves {self.n_legal_remaining_dice}")
-
-        if action < 24:
+        
+        if action < 25:
             m.src = action
             m.n = self.remaining_dice[0]
         else:
             dice_using = 1
-            m.src = action - 24
+            m.src = action - 25
             m.n = self.remaining_dice[1]
+        
+        #print(f"Step action: action:{action} pos:{m.src }  dice:{m.n}  remaining_dice: {self.remaining_dice} n_legal_moves {self.n_legal_remaining_dice}")
+
 
         if m.n == 0:
+            print(f"Invalid move: {m.src} {m.n}")
+            print(f"Board state:\n{self.board_curr}")
             raise ValueError(f"Invalid action in step(): {action} dice: {self.remaining_dice} m: {m}")
+
 
         BoardState.apply_move(self.board_curr, m)
 
@@ -210,7 +215,7 @@ cdef class BGGame:
         self.n_legal_remaining_dice -= 1
         
         if self.remaining_dice[0] == 0 or self.n_legal_remaining_dice == 0:
-            print(f"no more moves left in step()")
+            #print(f"no more moves left in step()")
             # this is probably redudnat and we can just call fitler_move_from_legal_actions
             # and it should do the same thing
             for mSeq in self.legal_moves:
@@ -219,7 +224,7 @@ cdef class BGGame:
                     self._no_moves_left(mSeq)
                     break
         else:
-            print("fitering moves from ")
+            #print("fitering moves from ")
             self.filter_move_from_legal_actions(m)
 
         self.update_state()
