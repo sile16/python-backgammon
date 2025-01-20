@@ -206,7 +206,7 @@ cdef class BGGame:
             dice_using = 1
         
         #uncompresses action index to a point index
-        for i in range(0, 25):
+        for i in range(25):  # returns 0-24
             if self.board_curr[0, i] > 0:
                 if action_idx == action:
                     m = Move(i, self.remaining_dice[dice_using])
