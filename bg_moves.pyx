@@ -227,7 +227,7 @@ cdef class MoveSequence:
             self.n_moves += 1
         return self
 
-    cdef int use_move(self, unsigned char src, unsigned char n):
+    cpdef int use_move(self, unsigned char src, unsigned char n):
         """ removes move the first position """
 
         if self.n_moves == 0:
@@ -237,7 +237,8 @@ cdef class MoveSequence:
         
         for i in range(0, self.n_moves - 1):
             self.moves[i] = self.moves[i + 1]
-            self.n_moves -= 1
+        
+        self.n_moves -= 1
 
         self.used_moves[self.n_used_moves].src = src
         self.used_moves[self.n_used_moves].n = n
@@ -264,7 +265,7 @@ cdef class MoveSequence:
        
         return new_seq
     
-    cdef void set_final_board(self, np.ndarray[np.uint8_t, ndim=2] board):  
+    cdef void set_final_board(self, np.ndarray[np.int8_t, ndim=2] board):  
         self.final_board = board.copy()
         self.has_final_board = True
 
@@ -275,7 +276,7 @@ cdef class MoveGenerator:
     """Static methods for generating legal moves"""
     
     @staticmethod
-    cdef list generate_moves(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2):
+    cdef list generate_moves(np.ndarray[np.int8_t, ndim=2] board, unsigned char d1, unsigned char d2):
         cdef list all_sequences = []
         cdef unsigned char[2] reverse_dice
         cdef MoveSequence curr_seq
@@ -330,7 +331,7 @@ cdef class MoveGenerator:
     
     @staticmethod
     cdef void _generate_moves_recursive(
-        np.ndarray[np.uint8_t, ndim=2] board,
+        np.ndarray[np.int8_t, ndim=2] board,
         unsigned char move_num,
         unsigned char d1,
         unsigned char d2,
@@ -339,7 +340,7 @@ cdef class MoveGenerator:
     ):
         cdef int src
         cdef Move move
-        cdef np.ndarray[np.uint8_t, ndim=2] new_board
+        cdef np.ndarray[np.int8_t, ndim=2] new_board
         cdef unsigned char die_value
         cdef bint found_valid_move = False
         cdef MoveSequence new_sequence
@@ -425,15 +426,11 @@ cdef class MoveGenerator:
             curr_sequence.set_final_board(board)
             all_sequences.append(curr_sequence.copy())
             return
-    
-    @staticmethod
-    cdef bytes _board_to_bytes(np.ndarray[np.uint8_t, ndim=2] board): 
-        """Convert board state to bytes for hashing"""
-        return board.tobytes()
 
     @staticmethod
     cdef list _filter_moves(list sequences):
         """Filter move sequences to remove duplicates and ensure maximum move usage"""
+        
         if not sequences:
             return []
             
@@ -447,6 +444,7 @@ cdef class MoveGenerator:
         cdef MoveSequence seq
 
         #print("Total Sequence before filtering: ", len(sequences))
+        #print(f"Prefilter_1 list length: {len(sequences)} max_moves: {max_moves} max_die: {max_die}")
         
         # Keep only sequences with maximum number of moves
         max_die = 0
@@ -474,18 +472,18 @@ cdef class MoveGenerator:
             if not seq.has_final_board:
                 raise ValueError("Sequence missing final board state")
             
-            board_hash = MoveGenerator._board_to_bytes(seq.final_board)
+            board_hash = seq.final_board.tobytes()
             
             if board_hash not in unique_states:
                 unique_states.add(board_hash)
                 unique_sequences.append(seq)
         
-        #print(f"Returning from generate_moves, total all_sequences: {len(unique_sequences)}")
+        #print(f"Returning from filter_moves {len(unique_sequences)}, total all_sequences: ")
         return unique_sequences
 
 
     @staticmethod
-    cdef list generate_moves2(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2):
+    cdef list generate_moves2(np.ndarray[np.int8_t, ndim=2] board, unsigned char d1, unsigned char d2):
         
         cdef list all_sequences = []
         cdef unsigned char max_moves = 0
@@ -513,7 +511,7 @@ cdef class MoveGenerator:
         return MoveGenerator._filter_moves2(all_sequences, max_moves, max_die, True)
 
     @staticmethod
-    cdef list generate_moves3(np.ndarray[np.uint8_t, ndim=2] board, unsigned char d1, unsigned char d2):
+    cdef list generate_moves3(np.ndarray[np.int8_t, ndim=2] board, unsigned char d1, unsigned char d2):
         
         cdef list all_sequences = []
         cdef unsigned char max_moves = 0
@@ -539,7 +537,7 @@ cdef class MoveGenerator:
 
     @staticmethod
     cdef void _generate_moves_iterative(
-        np.ndarray[np.uint8_t, ndim=2] board,
+        np.ndarray[np.int8_t, ndim=2] board,
         unsigned char d1,
         unsigned char d2,
         list all_sequences,
@@ -662,5 +660,5 @@ cdef class MoveGenerator:
                     # for when doing indidivual pip moving
                     filtered_sequences.append(seq)
         
-        
+        #print(f"filtered list length: {len(filtered_sequences)} max_moves: {max_moves} max_die: {max_die}")
         return filtered_sequences

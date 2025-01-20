@@ -123,9 +123,9 @@ def test_dice_roll():
     """Verify dice roll logic."""
     state = BGGame()
     state.roll_dice()
-    dice = b'\x02\x05'
+    dice = (2, 5)
     state.set_dice(dice)
-    assert state.dice == b'\x02\x05'
+    assert state.dice == (2, 5)
 
     dice_rolls = []
     for _ in range(10):
@@ -162,7 +162,7 @@ def test_largest_die(default_state):
     default_state.set_board(np.array([
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14],
         [9, 0, 0, 0, 1, 1, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ], dtype=np.uint8))
+    ], dtype=np.int8))
 
     default_state.set_player(WHITE)
     default_state.set_dice((3, 4))
@@ -257,14 +257,14 @@ def test_many_moves(default_state):
     board = np.array([
         [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 5]
-    ], dtype=np.uint8)
+    ], dtype=np.int8)
 
     default_state.set_board(board)
     moves = default_state.get_legal_moves()
     moves2 = default_state.get_legal_moves2()
     #assert moves == moves2
-    #assert len(moves) == 368
-    #assert len(moves2) == 368
+    assert len(moves) == 368
+    assert len(moves2) == 368
 
     default_state.reset()
     default_state.set_player(WHITE)
@@ -272,14 +272,14 @@ def test_many_moves(default_state):
     board = np.array([
         [0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 5]
-    ], dtype=np.uint8)
+    ], dtype=np.int8)
 
     default_state.set_board(board)
     moves = default_state.get_legal_moves()
     moves2 = default_state.get_legal_moves2()
     #assert moves == moves2
-    #assert len(moves) == 1259
-    #assert len(moves2) == 1259 #todo why?
+    assert len(moves) == 1259
+    assert len(moves2) == 1259
 
     default_state.reset()
     default_state.set_player(WHITE)
@@ -287,7 +287,7 @@ def test_many_moves(default_state):
     board = np.array([
         [0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 5]
-    ], dtype=np.uint8)
+    ], dtype=np.int8)
 
     default_state.set_board(board)
     moves = default_state.get_legal_moves()
@@ -324,7 +324,7 @@ def test_both_players_on_bar(default_state):
 
     board = np.array(
         [[1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 3, 0, 2, 2, 5, 0, 0],
-         [0, 7, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]], dtype=np.uint8)
+         [0, 7, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]], dtype=np.int8)
     
     default_state.set_board(board)
     default_state.set_player(WHITE)

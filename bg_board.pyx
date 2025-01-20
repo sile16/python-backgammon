@@ -7,7 +7,7 @@ cdef class BoardState:
     """Static methods for board operations to support efficient move generation"""
     
     @staticmethod
-    cdef bint can_bear_off(np.ndarray[np.uint8_t, ndim=2] board):
+    cdef bint can_bear_off(np.ndarray[np.int8_t, ndim=2] board):
         cdef unsigned char pip_count = 0
         cdef int i
         
@@ -17,7 +17,7 @@ cdef class BoardState:
         return pip_count == 15
     
     @staticmethod
-    cdef bint can_move_pip(np.ndarray[np.uint8_t, ndim=2] board, unsigned char src, unsigned char n) :
+    cdef bint can_move_pip(np.ndarray[np.int8_t, ndim=2] board, unsigned char src, unsigned char n) :
         cdef unsigned char dst
         cdef unsigned char i
 
@@ -53,7 +53,7 @@ cdef class BoardState:
         return True
 
     @staticmethod
-    cdef void apply_move(np.ndarray[np.uint8_t, ndim=2] board, Move move):
+    cdef void apply_move(np.ndarray[np.int8_t, ndim=2] board, Move move):
         cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
 
         if DEBUG:
@@ -93,7 +93,7 @@ cdef class BoardState:
             print("")
 
     @staticmethod
-    cdef void sanity_checks(np.ndarray[np.uint8_t, ndim=2] board):
+    cdef void sanity_checks(np.ndarray[np.int8_t, ndim=2] board):
         cdef int i
         cdef int sum_white = 0
         cdef int sum_black = 0
