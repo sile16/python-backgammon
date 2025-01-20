@@ -88,12 +88,13 @@ def play_single_game():
     """Play a single game and return statistics"""
     stats = initialize_stats()
     state = BGGame()
-    state.pick_first_player()
+    state.set_player(0)
+    state.randomize_seed()
     state.roll_dice()
+    
     set_debug(False)
     
     max_moves = 0
-    no_moves_found = 0
     
     while not state.isTerminal():
         try:

@@ -37,9 +37,6 @@ def set_random_seed(seed):
     srand(seed)
 
 
-
-
-
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef class DiceRollHelper:
@@ -105,6 +102,8 @@ cdef class BGGame:
 
     cpdef list legal_actions(self, int depth=0):
         cdef set moves_as_int = set()
+        cdef list compressed_moves = [] # convert point index into index of occurance of curren player pips
+        cdef int offset, idx
 
         if self.isTerminal():
             return []
@@ -148,8 +147,20 @@ cdef class BGGame:
                 # we found a move that should have been filtered
                 raise ValueError(f"Invalid move 777: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.n_legal_remaining_dice}")
 
-    
-        return list(moves_as_int)
+        #compress moves from a point based index to a index of occurance of current player pips
+        #instead of 0-24 we will have 0-14 and 15-24 as 15 pips could have a max of 15 indexes.
+        for x in moves_as_int:
+            offset = 0
+            if x >  24:
+                x -= 25
+                offset = 15
+            new_idx = 0
+            for i in range(0, x):
+                if self.board_curr[0, i] > 0:
+                    new_idx += 1
+            compressed_moves.append(new_idx + offset)
+
+        return compressed_moves
 
     cdef void _no_moves_left(self, MoveSequence mseq = None):
         self._check_for_winner()
@@ -182,20 +193,28 @@ cdef class BGGame:
 
     cpdef tuple step(self, int action):
         """
-        action 0-24 is move src position 0-24 dice0 moves
-        action 25-49 is move src position 0-24 dice1 moves
+        action 0-14 is move src index of possible currnet user pips dice0 moves
+        action 15-29 is move src position 0-24 dice1 moves
         applies move and then changes turn and rolls dice if turn is complete
         """
         cdef Move m
         cdef int dice_using = 0
+        cdef int action_idx = 0
         
-        if action < 25:
-            m.src = action
-            m.n = self.remaining_dice[0]
-        else:
+        if action > 14:
+            action -= 15
             dice_using = 1
-            m.src = action - 25
-            m.n = self.remaining_dice[1]
+        
+        #uncompresses action index to a point index
+        for i in range(0, 25):
+            if self.board_curr[0, i] > 0:
+                if action_idx == action:
+                    m = Move(i, self.remaining_dice[dice_using])
+                    break
+                action_idx += 1
+    
+        
+
         
         #print(f"Step action: action:{action} pos:{m.src }  dice:{m.n}  remaining_dice: {self.remaining_dice} n_legal_moves {self.n_legal_remaining_dice}")
 
