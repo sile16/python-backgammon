@@ -552,8 +552,6 @@ cdef class MoveGenerator:
 
         cdef bint isDouble = d1 == d2
 
-
-        
         if d1 > d2:
             stack.append((board, MoveSequence([d2, d1]), 0, BAR_POS))
             stack.append((board, MoveSequence([d1, d2]), 0, BAR_POS))
