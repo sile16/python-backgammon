@@ -7,6 +7,7 @@ cdef enum:
     BEAR_OFF_POS = 25
     OPP_BAR_POS = 25
     OPP_BEAR_OFF_POS = 0
+    ACTION_PASS = 30
     WHITE = 0
     BLACK = 1
     NONE = 2

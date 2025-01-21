@@ -68,6 +68,7 @@ cdef class BGGame:
         public np.ndarray remaining_dice
         public int n_legal_remaining_dice # could be less than reamining based on 
         public bint last_move
+        public bint first_move
         public list legal_moves
         public int points
         public list move_seq_list
@@ -76,8 +77,11 @@ cdef class BGGame:
     def __cinit__(self):
         self.reset()
 
-    def randomize_seed(self):
-        srand(int.from_bytes(os.urandom(4), 'little'))  # 32-bit random seed
+    def randomize_seed(self, seed = None):
+        if seed:
+            srand(seed)
+        else:
+            srand(int.from_bytes(os.urandom(4), 'little'))  # 32-bit random seed
 
     cpdef BGGame copy(self):
         cdef BGGame new_game = BGGame()
@@ -85,8 +89,8 @@ cdef class BGGame:
         new_game.set_board(self.board)
         new_game.player = self.player
         new_game.winner = self.winner
-        new_game.dice[0] = self.dice[0]
-        new_game.dice[1] = self.dice[1]
+        new_game.dice = self.dice
+        #new_game.dice[1] = self.dice[1]
         new_game.bear_off[0] = self.bear_off[0]
         new_game.bear_off[0] = self.bear_off[1]
         new_game.legal_moves = self.legal_moves.copy()
@@ -97,10 +101,13 @@ cdef class BGGame:
         new_game.remaining_dice[1] = self.remaining_dice[1]
         new_game.remaining_dice[2] = self.remaining_dice[2]
         new_game.remaining_dice[3] = self.remaining_dice[3]
+
+        new_game.first_move = self.first_move
+        new_game.last_move = self.last_move 
         return new_game
 
 
-    cpdef list legal_actions(self, int depth=0):
+    cpdef list legal_actions(self):
         cdef set moves_as_int = set()
         cdef list compressed_moves = [] # convert point index into index of occurance of curren player pips
         cdef int offset, idx
@@ -108,8 +115,7 @@ cdef class BGGame:
         if self.isTerminal():
             return []
         """ return legal actions, if no actions available switch player and try again until legal actions found"""
-        if depth > 10:
-            raise ValueError("Max legal move recursion depth found")
+    
 
         if len(self.legal_moves) == 0:
             self.legal_moves = MoveGenerator.generate_moves3(self.board_curr, self.dice[0], self.dice[1])
@@ -117,11 +123,11 @@ cdef class BGGame:
         # No legal moves so change player and roll_dice
         if len(self.legal_moves) == 0:
             #print(f"No existing legal moves chaning player")
-            self.set_player(1 - self.player)
-            self.roll_dice()
-            self.update_state()
-            return self.legal_actions(depth + 1)
-        
+            self.last_move = True
+            self.n_legal_remaining_dice = 0
+            compressed_moves.append(ACTION_PASS)
+            return compressed_moves
+            
         #because you always have to play max moves, all moves sequences should be the same lenght
         #so we should look at the first one
         self.n_legal_remaining_dice = self.legal_moves[0].n_moves
@@ -162,6 +168,7 @@ cdef class BGGame:
 
         return compressed_moves
 
+
     cdef void _no_moves_left(self, MoveSequence mseq = None):
         self._check_for_winner()
         if not self.isTerminal():
@@ -191,6 +198,28 @@ cdef class BGGame:
 
         self.legal_moves = remaining_legal_moves
 
+    cpdef action_to_string (self, int action):
+        cdef Move m
+        cdef int offset = 0
+        cdef int dice_using = 0
+        cdef int action_idx = 0
+
+        if action > 14:
+            action -= 15
+            dice_using = 1
+
+        #uncompresses action index to a point index
+        for i in range(25):  # returns 0-24
+            if self.board_curr[0, i] > 0:
+                if action_idx == action:
+                    m = Move(i, self.remaining_dice[dice_using])
+                    break
+                action_idx += 1
+            
+        return f"Move: From: {m.src} with Dice: {m.n}  landing on {min(m.src + m.n, BEAR_OFF_POS)}"
+
+    
+
     cpdef tuple step(self, int action):
         """
         action 0-14 is move src index of possible currnet user pips dice0 moves
@@ -200,6 +229,11 @@ cdef class BGGame:
         cdef Move m
         cdef int dice_using = 0
         cdef int action_idx = 0
+
+        if action == ACTION_PASS:
+            self._no_moves_left(MoveSequence())
+            self.update_state()
+            return ( self.get_observation(), self.points, self.isTerminal() )
         
         if action > 14:
             action -= 15
@@ -253,35 +287,66 @@ cdef class BGGame:
     
     cpdef np.ndarray get_observation(self):
         """Returns a NumPy array representing the full game state."""
-        cdef np.ndarray board_state = np.zeros(28, dtype=np.int8)  # Corrected array initialization
+        cdef np.ndarray board_state = np.zeros(28, dtype=np.float32)  # Ensure float32 for consistency
+        cdef np.ndarray combined
 
         # Fill board representation
         cdef int i
-        cdef int total
-        for i in range(24):  # Now correctly iterating over 0-23
-            total = self.board_curr[0, i + 1] - self.board_curr[1, i + 1] 
-            #print(f"i: {i} {self.board_curr[0, i + 1]} {self.board_curr[1, i + 1]} total: {total}")
-            board_state[i] =  total# Player's checkers are positive, opponent's negative
+        for i in range(24):  
+            board_state[i] = (self.board_curr[0, i + 1] - self.board_curr[1, i + 1]) / 15.0  # Normalize checkers
 
         # Bar and bear-off positions
-        board_state[24] = self.board_curr[0, BAR_POS]   # Player's checkers on the bar
-        board_state[25] = self.board_curr[0, BEAR_OFF_POS]  # Player's checkers borne off
-        board_state[26] = self.board_curr[1, OPP_BAR_POS] * -1  # Opponent's checkers on the bar
-        board_state[27] = self.board_curr[1, OPP_BEAR_OFF_POS]  * -1 # Opponent's checkers borne off
-        
+        board_state[24] = self.board_curr[0, BAR_POS] / 15.0  # Player's checkers on bar
+        board_state[25] = self.board_curr[0, BEAR_OFF_POS] / 15.0  # Player's checkers borne off
+        board_state[26] = -self.board_curr[1, OPP_BAR_POS] / 15.0  # Opponent's checkers on bar
+        board_state[27] = -self.board_curr[1, OPP_BEAR_OFF_POS] / 15.0  # Opponent's checkers borne off
+
         # Additional flags (turn status, legal moves, etc.)
         cdef np.ndarray additional_flags = np.array([
-            1 if self.last_move else 0, # Ensure this is a scalar int
-            1 if self.bear_off[self.player] else 0, # Ensure this is a scalar int
-            0 if self.bear_off[1 - self.player] else 1, # Ensure this is a scalar int
-            int(self.n_legal_remaining_dice) , # Ensure this is a scalar int
-        ], dtype=np.int8)
+            1.0 if self.first_move else 0.0,  # Float to match observation format
+            1.0 if self.last_move else 0.0,  # Float to match observation format
+            1.0 if self.bear_off[self.player] else 0.0,
+            0.0 if self.bear_off[1 - self.player] else 1.0,
+            self.n_legal_remaining_dice / 4.0,  # Normalize to range [0,1]
+        ], dtype=np.float32)
 
-        # Concatenate all elements into a single observation array
-        return np.concatenate([board_state, additional_flags, self.dice, self.remaining_dice, self.blots, self.blocks])
+        # Ensure dice values are NumPy arrays before division
+        cdef np.ndarray dice_values = np.array(self.dice, dtype=np.float32) / 6.0
+        cdef np.ndarray remaining_dice_values = np.array(self.remaining_dice, dtype=np.float32) / 6.0
+
+        # Convert blots and blocks to float32 for consistency
+        cdef np.ndarray blots_float = self.blots.astype(np.float32)
+        cdef np.ndarray blocks_float = self.blocks.astype(np.float32)
+
+        # Concatenate into a single observation array
+        combined = np.concatenate([
+            board_state, 
+            additional_flags, 
+            dice_values, 
+            remaining_dice_values, 
+            blots_float, 
+            blocks_float
+        ])
+
+        return np.expand_dims(np.expand_dims(combined, axis=0), axis=0)  # Add batch and channel dimensions
+
     
     cpdef int get_move_count(self):
         return len(self.move_seq_list)
+    
+    cpdef void render(self):
+        #print the board to the console
+        print(f"Player: {self.player} Dice: {self.dice} Remaining Dice: {self.remaining_dice}")
+        print(f"Blots: {self.blots}")
+        print(f"Blocks: {self.blocks}")
+        print(f"Bear Off: {self.bear_off}")
+        print(f"Move Seq List: {self.move_seq_list}")
+        print(f"Board: {self.board_curr}")
+        print(f"Points: {self.points}")
+        print(f"Winner: {self.winner}")
+        print(f"Legal Moves: {self.legal_moves}")
+        print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
+        print(f"Last Move: {self.last_move}")
     
     cpdef void reset(self):
         self.player = NONE
@@ -392,9 +457,13 @@ cdef class BGGame:
             if self.dice[0] == self.dice[1]:
                 self.remaining_dice[2] = self.dice[0]
                 self.remaining_dice[3] = self.dice[1]
+                self.n_legal_remaining_dice = 4
             else:
                 self.remaining_dice[2] = 0
-                self.remaining_dice[3] = 0      
+                self.remaining_dice[3] = 0
+                self.n_legal_remaining_dice = 2
+            self.first_move = True
+            self.last_move = False
     
     cpdef void pick_first_player(self):
         while self.player == NONE:
