@@ -19,6 +19,7 @@ cdef class MoveSequence:
     #def __hash__(self)
     cdef public uint32_t _toIndex(self)
     cpdef int use_move(self, unsigned char src, unsigned char n)
+    cdef void reset(self)
 
     @staticmethod
     #def toSequenceFromIndex(encoded)
@@ -29,6 +30,13 @@ cdef class MoveSequence:
 cdef class MoveGenerator:
     @staticmethod
     cdef list generate_moves(np.ndarray[np.int8_t, ndim=2] board, unsigned char d1, unsigned char d2)
+
+    @staticmethod
+    cdef list generate_moves4(
+        np.ndarray[np.int8_t, ndim=2] board,
+        unsigned char d1,
+        unsigned char d2,
+    )
     
     @staticmethod
     cdef void _generate_moves_recursive(
@@ -58,6 +66,7 @@ cdef class MoveGenerator:
         unsigned char* max_moves_ptr,
         unsigned char* max_die_ptr
     )
+
 
     @staticmethod
     cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die, bint filter)

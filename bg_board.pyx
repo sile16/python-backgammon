@@ -15,18 +15,36 @@ cdef class BoardState:
             pip_count += board[0, i]
         
         return pip_count == 15
+
+    @staticmethod
+    cdef void undo_move(np.ndarray[np.int8_t, ndim=2] board, Move move, bint blotted):
+        cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
+
+        if DEBUG:
+            print(f"undoing move src {move.src} min dst {dst}  blotted {blotted} ")
+        
+        # Revert movement
+        board[0, dst] -= 1
+        board[0, move.src] += 1
+
+        # Revert hitting opponent’s blot
+        if blotted:
+            board[1, dst] = 1
+            board[1, OPP_BAR_POS] -= 1
+
+        BoardState.sanity_checks(board)
     
     @staticmethod
     cdef bint can_move_pip(np.ndarray[np.int8_t, ndim=2] board, unsigned char src, unsigned char n) :
         cdef unsigned char dst
         cdef unsigned char i
 
-        # Must move from bar first
-        if board[0, BAR_POS] > 0 and src != BAR_POS:
-            return False
-        
         # Must have a piece to move
         if board[0, src] == 0:
+            return False
+
+        # Must move from bar first
+        if board[0, BAR_POS] > 0 and src != BAR_POS:
             return False
         
         if src > 24:
@@ -53,23 +71,27 @@ cdef class BoardState:
         return True
 
     @staticmethod
-    cdef void apply_move(np.ndarray[np.int8_t, ndim=2] board, Move move):
+    cdef bint apply_move(np.ndarray[np.int8_t, ndim=2] board, Move move):
+        """applies move to board and return True, if a piece was hit"""
         cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
 
-        if DEBUG:
+        #print("before apply sanity")
+        #BoardState.sanity_checks(board)
+
+        if DEBUG or not BoardState.can_move_pip(board, move.src, move.n) :
             print(f"Applying move: {move.src} {move.n}")
             print(f"Board state:\n{board}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
             print(np.array_str(board, precision=2, suppress_small=True))
 
-        if board[0, move.src] == 0:
-            raise ValueError("Error: No piece to move")
+            if board[0, move.src] == 0:
+                raise ValueError("Error: No piece to move")
 
-        if board[0, BAR_POS] > 0 and move.src != BAR_POS:
-            raise ValueError("Error: Must move from bar first")
+            if board[0, BAR_POS] > 0 and move.src != BAR_POS:
+                raise ValueError("Error: Must move from bar first")
         
-        if move.src > 24:
-            raise ValueError("Invalid src position for a move")
+            if move.src > 24:
+                raise ValueError("Invalid src position for a move")
         
         # Move piece from source to destination
         board[0, move.src] -= 1
@@ -81,9 +103,12 @@ cdef class BoardState:
             if board[1, dst] == 1:
                 board[1, dst] = 0
                 board[1, OPP_BAR_POS] += 1
+                return True # blotted, return true
             elif board[1, dst] > 1:
                 raise ValueError("Error: More than one opponent piece on destination")
 
+        #print("after apply sanity")
+        #BoardState.sanity_checks(board)
         if DEBUG:
             print(f"done with move: {move.src} {move.n}")
             print(f"Board state:\n{board}")
@@ -91,6 +116,8 @@ cdef class BoardState:
             print(np.array_str(board, precision=2, suppress_small=True))
             print("")
             print("")
+
+        return False # not blotted
 
     @staticmethod
     cdef void sanity_checks(np.ndarray[np.int8_t, ndim=2] board):
@@ -103,11 +130,13 @@ cdef class BoardState:
             sum_white += board[0, i]
             sum_black += board[1, i]
 
-            if board[0,i] > 15 or board[1,i] > 15:
+            if board[0,i] > 15 or board[1,i] > 15 or board[0,i] < 0 or board[1,i] < 0:
                 print(f"Board state:\n{board}")
                 print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
                 print(np.array_str(board, precision=2, suppress_small=True))
                 raise ValueError("Error: Invalid board state, piece count > 15")
+
+            
         
         if sum_white != 15 or sum_black != 15:
             #print sums:

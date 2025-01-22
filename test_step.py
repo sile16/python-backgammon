@@ -13,7 +13,7 @@ if build_lib_dir not in sys.path:
     sys.path.insert(0, build_lib_dir)
 
 
-from bg_game import set_debug, get_debug, set_random_seed, BGGame
+from bg_game import set_debug, get_debug, BGGame
 from bg_moves import MoveSequence
 
 # Constants for player colors
@@ -30,23 +30,30 @@ def default_state():
     bg.roll_dice()
     return bg
 
-
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""
     count = 1000
     wins = [0, 0]
     points = [0, 0]
     rewards = [0, 0, 0, 0]
+    #set_debug(True)
     for x in range(count):
         default_state.reset()
         default_state.set_player(WHITE)
         default_state.roll_dice()
 
         while not default_state.isTerminal():
-            legal_actions = default_state.legal_actions()
-            i = np.random.randint(len(legal_actions))
+            #legal_actions = default_state.legal_actions()
+            legal_actions2 = default_state.legal_actions()
+            #legal_actions.sort()
+            legal_actions2.sort()
+
+            #assert len(legal_actions) == len(legal_actions2)
+            #assert legal_actions ==  legal_actions2
+
+            i = np.random.randint(len(legal_actions2))
             
-            obs, reward, done = default_state.step(legal_actions[i])
+            obs, reward, done = default_state.step(legal_actions2[i])
             
             if done:
                 points[default_state.player] += reward
@@ -83,30 +90,31 @@ def test_no_legal_moves(default_state):
     """Ensure the game properly handles a scenario where no legal moves exist."""
     default_state.reset()
     default_state.set_player(WHITE)
-    default_state.set_board_state([
+    default_state.set_board([
         # Simulated board where all white checkers are blocked
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1],
         [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0]
     ])
     default_state.roll_dice()
     
-    legal_moves = default_state.genmoves(3)
-    assert len(legal_moves) == 0  # Should return an empty list
+    legal_moves = default_state.legal_actions()
+    assert len(legal_moves) == 1  # Should return an empty list
+    assert legal_moves[0] == 30  # Should return a pass move
 
 def test_bearing_off(default_state):
     """Ensure bearing off moves are handled correctly."""
     default_state.reset()
     default_state.set_player(WHITE)
-    default_state.set_board_state([
+    default_state.set_board([
         # Simulated board with all checkers in bear-off range
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15]
     ])
     default_state.roll_dice()
     
-    legal_moves = default_state.genmoves(3)
+    legal_moves = default_state.legal_actions()
     for move in legal_moves:
-        assert move.is_bear_off()  # Verify that generated moves include bearing off
+        assert move == 0 or move == 15
 
 
 if __name__ == "__main__":

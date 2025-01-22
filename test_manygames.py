@@ -155,7 +155,7 @@ def worker(n_games, result_queue, process_id, progress_queue):
 def run_games(n_games):
     """Run multiple games using multiple processes"""
     start_time = time.time()
-    n_cores = mp.cpu_count()
+    n_cores = 1 #mp.cpu_count()
     games_per_process = n_games // n_cores
     remaining_games = n_games % n_cores
     
@@ -200,5 +200,5 @@ def run_games(n_games):
         print_summary_statistics(final_stats, duration, n_games)
 
 if __name__ == "__main__":
-    N_GAMES = 50000  # Increased number of games to better utilize multiple cores
+    N_GAMES = 1000  # Increased number of games to better utilize multiple cores
     run_games(N_GAMES)

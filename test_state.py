@@ -12,7 +12,7 @@ if build_lib_dir not in sys.path:
     sys.path.insert(0, build_lib_dir)
 
 
-from bg_game import set_debug, get_debug, set_random_seed, BGGame
+from bg_game import set_debug, get_debug, BGGame
 from bg_moves import MoveSequence
 
 # Constants for player colors
@@ -25,6 +25,8 @@ NONE = 2
 def default_state():
     """Fixture to initialize the default game state."""
     return BGGame()
+
+
 
 # Debug Mode Tests
 def test_set_debug():
@@ -39,17 +41,17 @@ def test_set_random_seed():
 
     state = BGGame()
     
-    set_random_seed(42)
+    state.randomize_seed(42)
     state.roll_dice()
     d1 = state.dice
     
-    set_random_seed(42)
+    state.randomize_seed(42)
     state.roll_dice()
     d2 = state.dice
 
     assert d1 == d2
 
-    set_random_seed(43)
+    state.randomize_seed(43)
     state.roll_dice()
     d2 = state.dice
 
@@ -159,10 +161,11 @@ def test_generate_valid_moves(default_state):
 def test_largest_die(default_state):
     
 
-    default_state.set_board(np.array([
+    orig = np.array([
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14],
         [9, 0, 0, 0, 1, 1, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ], dtype=np.int8))
+    ], dtype=np.int8)
+    default_state.set_board(orig.copy())
 
     default_state.set_player(WHITE)
     default_state.set_dice((3, 4))
@@ -225,12 +228,12 @@ def test_bar_and_bear_off_logic(default_state):
 # Regression Tests
 def test_seeded_move_generation(default_state):
     """Capture and validate move generation with seeded randomness."""
-    set_random_seed(42)
+    default_state.randomize_seed(42)
     default_state.set_player(WHITE)
     default_state.set_dice((6, 1))
 
     moves = default_state.get_legal_moves()
-    set_random_seed(42)
+    default_state.randomize_seed(42)
     repeated_moves = default_state.get_legal_moves()
 
 
@@ -238,12 +241,12 @@ def test_seeded_move_generation(default_state):
 
 def test_seeded_move_generation(default_state):
     """Capture and validate move generation with seeded randomness."""
-    set_random_seed(42)
+    default_state.randomize_seed(42)
     default_state.set_player(WHITE)
     default_state.set_dice((6, 1))
 
     moves = default_state.get_legal_moves()
-    set_random_seed(42)
+    default_state.randomize_seed(42)
     repeated_moves = default_state.get_legal_moves()
 
     assert moves == repeated_moves

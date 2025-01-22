@@ -18,7 +18,7 @@ import os
 
 
 # Export these functions at module level
-__all__ = ['set_debug', 'get_debug', 'set_random_seed', 'State']
+__all__ = ['set_debug', 'get_debug', 'State']
 
 # Add global function to set debug mode
 def set_debug(enabled):
@@ -30,11 +30,6 @@ def get_debug():
     """Python-accessible wrapper for getting debug mode"""
     global DEBUG
     return DEBUG
-
-# Add function to set random seed
-def set_random_seed(seed):
-    """Python-accessible wrapper for setting random seed"""
-    srand(seed)
 
 
 @cython.boundscheck(False)
@@ -72,6 +67,7 @@ cdef class BGGame:
         public list legal_moves
         public int points
         public list move_seq_list
+        public MoveSequence move_seq_curr
         
     
     def __cinit__(self):
@@ -106,68 +102,8 @@ cdef class BGGame:
         new_game.last_move = self.last_move 
         return new_game
 
-
     cpdef list legal_actions(self):
-        cdef set moves_as_int = set()
-        cdef list compressed_moves = [] # convert point index into index of occurance of curren player pips
-        cdef int offset, idx
-
-        if self.isTerminal():
-            return []
-        """ return legal actions, if no actions available switch player and try again until legal actions found"""
-    
-
-        if len(self.legal_moves) == 0:
-            self.legal_moves = MoveGenerator.generate_moves3(self.board_curr, self.dice[0], self.dice[1])
-        
-        # No legal moves so change player and roll_dice
-        if len(self.legal_moves) == 0:
-            #print(f"No existing legal moves chaning player")
-            self.last_move = True
-            self.n_legal_remaining_dice = 0
-            compressed_moves.append(ACTION_PASS)
-            return compressed_moves
-            
-        #because you always have to play max moves, all moves sequences should be the same lenght
-        #so we should look at the first one
-        self.n_legal_remaining_dice = self.legal_moves[0].n_moves
-        #print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
-
-        # if only one move left then this is the last move
-        if self.n_legal_remaining_dice == 1:
-            self.last_move = True
-        else:
-            self.last_move = False
-        
-
-        # find all moves, 
-        for mSeq in self.legal_moves:
-            
-            #print(f"mSeq: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.remaining_dice}")
-            num = mSeq.moves[0]['src'] # 0 based index
-            if mSeq.moves[0]['n'] == self.remaining_dice[0]:
-                moves_as_int.add(num)
-            elif mSeq.moves[0]['n'] == self.remaining_dice[1]:
-                moves_as_int.add(num + 25)
-            else:
-                # we found a move that should have been filtered
-                raise ValueError(f"Invalid move 777: {mSeq.moves[0]['src']} {mSeq.moves[0]['n']} dice: {self.n_legal_remaining_dice}")
-
-        #compress moves from a point based index to a index of occurance of current player pips
-        #instead of 0-24 we will have 0-14 and 15-24 as 15 pips could have a max of 15 indexes.
-        for x in moves_as_int:
-            offset = 0
-            if x >  24:
-                x -= 25
-                offset = 15
-            new_idx = 0
-            for i in range(0, x):
-                if self.board_curr[0, i] > 0:
-                    new_idx += 1
-            compressed_moves.append(new_idx + offset)
-
-        return compressed_moves
-
+        return MoveGenerator.generate_moves4(self.board_curr, self.remaining_dice[0], self.remaining_dice[1])
 
     cdef void _no_moves_left(self, MoveSequence mseq = None):
         self._check_for_winner()
@@ -176,30 +112,11 @@ cdef class BGGame:
             self.roll_dice()
         self.legal_moves = []
 
-    cdef void filter_move_from_legal_actions(self, Move move):
-        cdef list remaining_legal_moves = []
-        cdef int i
-        cdef int remaining_moves = 0
-
-        for mSeq in self.legal_moves:
-            if mSeq.moves[0]['src'] == move.src and mSeq.moves[0]['n'] == move.n:
-
-                remaining_moves = mSeq.use_move(move.src, move.n)
-                
-                if remaining_moves == 0:
-                    # means we have exhausted all moves in the sequence
-                    # should be the end of this players turn
-                    self._no_moves_left(mSeq)
-                    self.move_seq_list.append(mSeq)
-                    return
-
-                remaining_legal_moves.append(mSeq )
-            
-
-        self.legal_moves = remaining_legal_moves
-
     cpdef action_to_string (self, int action):
-        cdef Move m
+        cdef Move m = self.uncompress(action)
+        return f"Move: From: {m.src} with Dice: {m.n}  landing on {min(m.src + m.n, BEAR_OFF_POS)}"
+
+    cdef Move uncompress(self, int action):
         cdef int offset = 0
         cdef int dice_using = 0
         cdef int action_idx = 0
@@ -212,13 +129,9 @@ cdef class BGGame:
         for i in range(25):  # returns 0-24
             if self.board_curr[0, i] > 0:
                 if action_idx == action:
-                    m = Move(i, self.remaining_dice[dice_using])
-                    break
+                    return Move(i, self.remaining_dice[dice_using])
                 action_idx += 1
-            
-        return f"Move: From: {m.src} with Dice: {m.n}  landing on {min(m.src + m.n, BEAR_OFF_POS)}"
-
-    
+        raise ValueError(f"Invalid action: {action} using_dice: {self.remaining_dice}")
 
     cpdef tuple step(self, int action):
         """
@@ -229,38 +142,30 @@ cdef class BGGame:
         cdef Move m
         cdef int dice_using = 0
         cdef int action_idx = 0
+        cdef MoveSequence mSeq
 
         if action == ACTION_PASS:
             self._no_moves_left(MoveSequence())
             self.update_state()
             return ( self.get_observation(), self.points, self.isTerminal() )
         
-        if action > 14:
-            action -= 15
-            dice_using = 1
-        
-        #uncompresses action index to a point index
-        for i in range(25):  # returns 0-24
-            if self.board_curr[0, i] > 0:
-                if action_idx == action:
-                    m = Move(i, self.remaining_dice[dice_using])
-                    break
-                action_idx += 1
+       
+        m = self.uncompress(action)
+        #uncompresses action index to a point index        
+        if m.n == 0:
+            print(f"Board state:\n{self.board_curr}")
+            raise ValueError(f"Invalid action: {action} using_dice: {self.remaining_dice} ")
     
-        
-
-        
+    
         #print(f"Step action: action:{action} pos:{m.src }  dice:{m.n}  remaining_dice: {self.remaining_dice} n_legal_moves {self.n_legal_remaining_dice}")
 
-
-        if m.n == 0:
-            print(f"Invalid move: {m.src} {m.n}")
-            print(f"Board state:\n{self.board_curr}")
-            raise ValueError(f"Invalid action in step(): {action} dice: {self.remaining_dice} m: {m}")
-
+    
+        #print("about to apply move")
 
         BoardState.apply_move(self.board_curr, m)
-
+        self.move_seq_curr.add_move(m.src, m.n)
+        
+        
         # move dice remaining down
         for i in range(dice_using, len(self.remaining_dice) - 1):
             self.remaining_dice[i] = self.remaining_dice[i + 1]
@@ -271,14 +176,9 @@ cdef class BGGame:
             #print(f"no more moves left in step()")
             # this is probably redudnat and we can just call fitler_move_from_legal_actions
             # and it should do the same thing
-            for mSeq in self.legal_moves:
-                if mSeq.moves[0]['src'] == m.src and mSeq.moves[0]['n'] == m.n:
-                    self.move_seq_list.append(mSeq)
-                    self._no_moves_left(mSeq)
-                    break
-        else:
-            #print("fitering moves from ")
-            self.filter_move_from_legal_actions(m)
+            
+            self._no_moves_left(self.move_seq_curr.copy())
+            self.move_seq_curr.reset()
 
         self.update_state()
         
@@ -359,7 +259,9 @@ cdef class BGGame:
 
         self.bear_off[0] = False
         self.bear_off[1] = False
+        self.move_seq_curr = MoveSequence()
         self.move_seq_list = []
+        
 
         #init blots and blocks
         self.blots = np.zeros(24, dtype=np.int8)
@@ -475,8 +377,9 @@ cdef class BGGame:
                     self.set_player(BLACK)
     
     cpdef void roll_dice(self):
-        self.dice = DiceRollHelper.random()
-        self.set_dice(self.dice)
+        dice = DiceRollHelper.random()
+        #print("Rolling Dice: ", dice)
+        self.set_dice(dice)
 
 
     cdef bint is_dice_valid(self):
