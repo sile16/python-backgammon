@@ -2,7 +2,7 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 import numpy as np
 import os
-
+import subprocess
 #run with python3 setup.py build_ext
 
 # Set build directories
@@ -47,3 +47,30 @@ setup(
         },
     },
 )
+
+# Automatically generate .pyi stub files after successful build
+def generate_stubs(build_lib_dir):
+    """Find compiled .so/.pyd modules and generate .pyi stubs using stubgen."""
+    if not os.path.exists(build_lib_dir):
+        print(f"Build directory '{build_lib_dir}' not found. Did you run setup.py build?")
+        return
+
+    modules = []
+    for root, _, files in os.walk(build_lib_dir):
+        for file in files:
+            if file.endswith((".so", ".pyd")):  # Detect compiled Cython extensions
+                module_name = os.path.splitext(file)[0]
+                modules.append(module_name)
+
+    if modules:
+        print("Generating .pyi stubs for compiled modules...")
+        for module in modules:
+            try:
+                subprocess.run(["stubgen", "-m", module, "-o", "."], check=True)
+                print(f"Stub generated for {module}")
+            except FileNotFoundError:
+                print("stubgen not found. Install it with: pip install mypy")
+    else:
+        print("No compiled modules found in build/lib.")
+
+generate_stubs(lib_dir)

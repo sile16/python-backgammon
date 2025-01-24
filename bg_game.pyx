@@ -241,12 +241,12 @@ cdef class BGGame:
         print(f"Blocks: {self.blocks}")
         print(f"Bear Off: {self.bear_off}")
         print(f"Move Seq List: {self.move_seq_list}")
-        print(f"Board: {self.board_curr}")
+        print(f"{self.board_curr}")
         print(f"Points: {self.points}")
         print(f"Winner: {self.winner}")
-        print(f"Legal Moves: {self.legal_moves}")
+        print(f"Legal Moves: {self.legal_moves()}")
         print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
-        print(f"Last Move: {self.last_move}")
+        #print(f"Last Move: {self.last_move}")
     
     cpdef void reset(self):
         self.player = NONE
