@@ -7,14 +7,9 @@ import sys
 # Current best Cython single thread is 120 games / second, 708 with 8 threads
 
 # Get the absolute path to the project root
-project_root = os.path.dirname(os.path.abspath(__file__))
+from python_backgammon.bg_game import set_debug, get_debug, BGGame
+from python_backgammon.bg_moves import MoveSequence
 
-# Add the build/lib directory to Python's path
-build_lib_dir = os.path.join(project_root, 'build', 'lib')
-if build_lib_dir not in sys.path:
-    sys.path.insert(0, build_lib_dir)
-
-from bg_game import BGGame, set_debug
 
 def initialize_stats():
     """Initialize statistics counters with default values"""
@@ -132,7 +127,7 @@ def run_games(n_games):
     print_summary_statistics(stats, duration, n_games)
 
 if __name__ == "__main__":
-    N_GAMES = 10000  # You can adjust the number of games as needed
+    N_GAMES = 5000  # You can adjust the number of games as needed
     #run_games(N_GAMES)
     bg = BGGame()
     bg.play_n_games_to_end(N_GAMES)

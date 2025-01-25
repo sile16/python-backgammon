@@ -6,9 +6,7 @@ import os
 import subprocess
 import sys
 
-
 pyx_files = ["bg_common.pyx", "bg_board.pyx", "bg_moves.pyx", "bg_game.pyx"]
-
 
 # Define Extensions for each module
 extensions = [
@@ -17,11 +15,11 @@ extensions = [
         sources=[os.path.join("python_backgammon", name)],
         include_dirs=[np.get_include(), "python_backgammon"],
         define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+        include_path=["python_backgammon"],
     )
     for name in pyx_files
 ]
-
-# Custom build_ext command to generate .pyi files after building extensions
+    
 class BuildExtWithStubs(build_ext_orig):
     def run(self):
         # Run the standard build_ext command
@@ -61,7 +59,7 @@ setup(
         include_path=[np.get_include(), "python_backgammon"],
     ),
     cmdclass={"build_ext": BuildExtWithStubs},
-    include_dirs=[np.get_include(), "src"],
+    include_dirs=[np.get_include(), "python_backgammon"],
     zip_safe=False,
     install_requires=[
         "numpy",

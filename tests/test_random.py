@@ -3,17 +3,12 @@ import numpy as np
 import os
 import sys
 
-# Get the absolute path to the project root
-project_root = os.path.dirname(os.path.abspath(__file__))
-
-# Add the build/lib directory to Python's path
-build_lib_dir = os.path.join(project_root, 'build', 'lib')
-if build_lib_dir not in sys.path:
-    sys.path.insert(0, build_lib_dir)
 
 
-from bg_game import set_debug, get_debug, BGGame
-from bg_moves import MoveSequence
+
+from python_backgammon.bg_game import set_debug, get_debug, BGGame
+from python_backgammon.bg_moves import MoveSequence
+
 
 # Constants for player colors
 WHITE = 0
