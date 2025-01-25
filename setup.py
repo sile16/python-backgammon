@@ -1,76 +1,79 @@
 from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext as build_ext_orig
 from Cython.Build import cythonize
 import numpy as np
 import os
 import subprocess
-#run with python3 setup.py build_ext
+import sys
 
-# Set build directories
-build_dir = "build"
-cython_build_dir = os.path.join(build_dir, "cython")  # For .pyx -> .c
-temp_dir = os.path.join(build_dir, "temp")  # For intermediate files
-lib_dir = os.path.join(build_dir, "lib")    # For final .so files
 
-# Ensure build directories exist
-for d in [build_dir, cython_build_dir, temp_dir, lib_dir]:
-    os.makedirs(d, exist_ok=True)
-
-# Define source files and their build locations
 pyx_files = ["bg_common.pyx", "bg_board.pyx", "bg_moves.pyx", "bg_game.pyx"]
+
+
+# Define Extensions for each module
 extensions = [
     Extension(
-        name.replace(".pyx", ""),  # Extension name without .pyx
-        sources=[os.path.join(cython_build_dir, name.replace(".pyx", ".c"))],
-        include_dirs=[np.get_include()],
+        name.split('.')[0],  # e.g., 'bg_common'
+        sources=[os.path.join("python_backgammon", name)],
+        include_dirs=[np.get_include(), "python_backgammon"],
         define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
     )
     for name in pyx_files
 ]
 
+# Custom build_ext command to generate .pyi files after building extensions
+class BuildExtWithStubs(build_ext_orig):
+    def run(self):
+        # Run the standard build_ext command
+        super().run()
+        # Generate .pyi stubs
+        self.generate_stubs()
+
+    def generate_stubs(self):
+        """Generate .pyi stub files for the compiled Cython modules."""
+        print("\nGenerating .pyi stub files using stubgen...")
+        for ext in extensions:
+            module_name = ext.name  # e.g., 'bg_common'
+            try:
+                # Run stubgen as a subprocess
+                subprocess.run(["stubgen", "-m", module_name, "-o", "."], check=True)
+                print(f"Stub generated for {module_name}")
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to generate stub for {module_name}: {e}")
+            except FileNotFoundError:
+                print("stubgen not found. Ensure 'mypy' is installed.")
+                sys.exit(1)
+
 setup(
+    name="python_backgammon",
+    version="1.0.0",
+    packages=["python_backgammon"],
+    description="Python Backgammon with Cython Optimizations",
+    author="Matthew Robertson",
+    author_email="sile16@gmail.com",
+    #package_dir={"python_backgammon": "python_backgammon"},
     ext_modules=cythonize(
-        pyx_files,
+        extensions,
         compiler_directives={
             "language_level": "3",
             "binding": True,
         },
-        build_dir=cython_build_dir,  # Directory for generated .c files
+        include_path=[np.get_include(), "python_backgammon"],
     ),
-    include_dirs=[np.get_include()],
-    options={
-        "build": {
-            "build_base": build_dir,
-            "build_temp": temp_dir,
-        },
-        "build_ext": {
-            "build_lib": lib_dir,
-        },
-    },
+    cmdclass={"build_ext": BuildExtWithStubs},
+    include_dirs=[np.get_include(), "src"],
+    zip_safe=False,
+    install_requires=[
+        "numpy",
+        "cython",
+    ],
+    setup_requires=[
+        "numpy",
+        "cython",
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Cython",
+        "Operating System :: OS Independent",
+    ],
 )
-
-# Automatically generate .pyi stub files after successful build
-def generate_stubs(build_lib_dir):
-    """Find compiled .so/.pyd modules and generate .pyi stubs using stubgen."""
-    if not os.path.exists(build_lib_dir):
-        print(f"Build directory '{build_lib_dir}' not found. Did you run setup.py build?")
-        return
-
-    modules = []
-    for root, _, files in os.walk(build_lib_dir):
-        for file in files:
-            if file.endswith((".so", ".pyd")):  # Detect compiled Cython extensions
-                module_name = os.path.splitext(file)[0]
-                modules.append(module_name)
-
-    if modules:
-        print("Generating .pyi stubs for compiled modules...")
-        for module in modules:
-            try:
-                subprocess.run(["stubgen", "-m", module, "-o", "."], check=True)
-                print(f"Stub generated for {module}")
-            except FileNotFoundError:
-                print("stubgen not found. Install it with: pip install mypy")
-    else:
-        print("No compiled modules found in build/lib.")
-
-generate_stubs(lib_dir)

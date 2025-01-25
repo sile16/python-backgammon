@@ -1,10 +1,10 @@
 import time
 import numpy as np
 from tqdm import tqdm
-import multiprocessing as mp
-from multiprocessing import Manager
 import os
 import sys
+
+# Current best Cython single thread is 120 games / second, 708 with 8 threads
 
 # Get the absolute path to the project root
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -29,25 +29,8 @@ def initialize_stats():
         'max_moves_seen': 0
     }
 
-def merge_stats(stats_list):
-    """Merge statistics from multiple processes"""
-    merged = initialize_stats()
-    
-    for stats in stats_list:
-        for winner in (0, 1):
-            merged['winner_counts'][winner] += stats['winner_counts'][winner]
-            merged['points_counts'][winner] += stats['points_counts'][winner]
-        
-        for win_type in merged['win_types']:
-            merged['win_types'][win_type] += stats['win_types'][win_type]
-        
-        merged['max_moves_seen'] = max(merged['max_moves_seen'], 
-                                     stats['max_moves_seen'])
-    
-    return merged
-
 def update_statistics(stats, winner, points, max_moves):
-    """Update game statistics safely"""
+    """Update game statistics"""
     if winner not in (0, 1):  # WHITE = 0, BLACK = 1
         raise ValueError(f"Invalid winner value: {winner}")
     
@@ -98,13 +81,6 @@ def play_single_game():
     
     while not state.isTerminal():
         try:
-            
-            #moves = state.get_legal_moves2()
-            #mlen = len(moves)
-            
-            #max_moves = max(max_moves, mlen)
-            #move_index = np.random.randint(mlen)
-            #state.do_moves(moves[move_index])
             moves = state.legal_actions()
             max_moves = max(max_moves, len(moves))
             move_index = np.random.randint(len(moves))
@@ -130,75 +106,33 @@ def print_state(state):
     print(f"Current Roll: {state.dice[0]} {state.dice[1]}")
     print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
     print(np.array_str(state.board, precision=2, suppress_small=True))
-    
-
-def worker(n_games, result_queue, process_id, progress_queue):
-    """Worker process function"""
-    np.random.seed(os.getpid() + process_id)  # Ensure different seeds for each process
-    process_stats = initialize_stats()
-    
-    for _ in range(n_games):
-        game_stats = play_single_game()
-        if game_stats:
-            # Merge this game's stats into process stats
-            for winner in (0, 1):
-                process_stats['winner_counts'][winner] += game_stats['winner_counts'][winner]
-                process_stats['points_counts'][winner] += game_stats['points_counts'][winner]
-            for win_type in process_stats['win_types']:
-                process_stats['win_types'][win_type] += game_stats['win_types'][win_type]
-            process_stats['max_moves_seen'] = max(process_stats['max_moves_seen'], 
-                                                game_stats['max_moves_seen'])
-        progress_queue.put(1)  # Report progress
-    
-    result_queue.put(process_stats)
 
 def run_games(n_games):
-    """Run multiple games using multiple processes"""
+    """Run multiple games sequentially"""
     start_time = time.time()
-    n_cores = 1 #mp.cpu_count()
-    games_per_process = n_games // n_cores
-    remaining_games = n_games % n_cores
+    print(f"Running {n_games} games on a single thread")
     
-    print(f"Running {n_games} games using {n_cores} CPU cores")
+    stats = initialize_stats()
     
-    with Manager() as manager:
-        result_queue = manager.Queue()
-        progress_queue = manager.Queue()
-        
-        processes = []
-        
-        # Start progress bar process
-        with tqdm(total=n_games, desc="Playing games", unit="game") as pbar:
-            # Start worker processes
-            for i in range(n_cores):
-                n_games_for_this_process = games_per_process + (1 if i < remaining_games else 0)
-                p = mp.Process(target=worker, 
-                             args=(n_games_for_this_process, result_queue, i, progress_queue))
-                processes.append(p)
-                p.start()
-            
-            # Update progress bar
-            completed = 0
-            while completed < n_games:
-                progress_queue.get()
-                completed += 1
-                pbar.update(1)
-        
-        # Wait for all processes to complete
-        for p in processes:
-            p.join()
-        
-        # Collect results
-        stats_list = []
-        while not result_queue.empty():
-            stats_list.append(result_queue.get())
-        
-        # Merge results from all processes
-        final_stats = merge_stats(stats_list)
-        
-        duration = time.time() - start_time
-        print_summary_statistics(final_stats, duration, n_games)
+    with tqdm(total=n_games, desc="Playing games", unit="game") as pbar:
+        for _ in range(n_games):
+            game_stats = play_single_game()
+            if game_stats:
+                # Merge this game's stats into the main stats
+                for winner in (0, 1):
+                    stats['winner_counts'][winner] += game_stats['winner_counts'][winner]
+                    stats['points_counts'][winner] += game_stats['points_counts'][winner]
+                for win_type in stats['win_types']:
+                    stats['win_types'][win_type] += game_stats['win_types'][win_type]
+                stats['max_moves_seen'] = max(stats['max_moves_seen'], 
+                                             game_stats['max_moves_seen'])
+            pbar.update(1)
+    
+    duration = time.time() - start_time
+    print_summary_statistics(stats, duration, n_games)
 
 if __name__ == "__main__":
-    N_GAMES = 1000  # Increased number of games to better utilize multiple cores
-    run_games(N_GAMES)
+    N_GAMES = 10000  # You can adjust the number of games as needed
+    #run_games(N_GAMES)
+    bg = BGGame()
+    bg.play_n_games_to_end(N_GAMES)

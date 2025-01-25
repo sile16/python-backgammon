@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import os
 import sys
+import time
 
 # Get the absolute path to the project root
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -353,7 +354,18 @@ def test_get_all_moves_all_dice(default_state):
 
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""
-    count = 5
+    count = 3000
+    white_win = 0
+    black_win = 0
+    normal = 0
+    gammon = 0
+    backgammon = 0
+    games = 0
+    steps = 0
+    delta = 0
+
+
+    start_time = time.time()
     for x in range(count):
         default_state.reset()
         default_state.set_player(WHITE)
@@ -368,12 +380,35 @@ def test_many_games(default_state):
             
             #print(f"applying dice roll {move.dice}")
             default_state.do_moves(move)
+            steps += 1
+        games += 1
+        if default_state.winner == WHITE:
+            white_win += 1
+        elif default_state.winner == BLACK:
+            black_win += 1
+
+        if default_state.points == 1:
+            normal += 1
+        elif default_state.points == 2:
+            gammon += 1
+        elif default_state.points == 3:
+            backgammon += 1
+        
+    end_time = time.time()
+    delta = end_time - start_time
+    
+    print(f"White Wins: {white_win} Black Wins: {black_win} Normal: {normal} Gammon: {gammon} Backgammon: {backgammon}")
+    print(f"Total Games: {games} Total Steps: {steps} Total Time: {end_time - start_time}")
+    print(f"Total Games/s: {games/delta} Total Steps/s: {steps/delta} Total Time: {end_time - start_time}")
+
+    many_games2(default_state, count)
+
          
         
-            
-            
+
+def many_games2(default_state, num_many_games):        
+    default_state.play_n_games_to_end(num_many_games)
     
-        
     
     
 

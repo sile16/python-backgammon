@@ -3,3 +3,18 @@
 __pycache__
 *.pyc
 build/
+
+dist/
+*.egg-info/
+*.so
+*.pyd
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+env/
+.DS_Store
+*.pyi
+*.c

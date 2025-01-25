@@ -71,27 +71,30 @@ cdef class BoardState:
         return True
 
     @staticmethod
-    cdef bint apply_move(np.ndarray[np.int8_t, ndim=2] board, Move move):
+    cdef bint apply_move(np.ndarray[np.int8_t, ndim=2] board, Move move) :
         """applies move to board and return True, if a piece was hit"""
-        cdef unsigned char dst = min(move.src + move.n, BEAR_OFF_POS)
-
-        #print("before apply sanity")
-        #BoardState.sanity_checks(board)
+        cdef unsigned char dst = move.src + move.n
+        if dst > BEAR_OFF_POS:
+            dst = BEAR_OFF_POS
 
         if DEBUG or not BoardState.can_move_pip(board, move.src, move.n) :
+            BoardState.sanity_checks(board)
+            #if not BoardState.can_move_pip(board, move.src, move.n):
+            #    raise ValueError("Pip can't move ")
+            
             print(f"Applying move: {move.src} {move.n}")
             print(f"Board state:\n{board}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
             print(np.array_str(board, precision=2, suppress_small=True))
 
-            if board[0, move.src] == 0:
-                raise ValueError("Error: No piece to move")
+            #if board[0, move.src] == 0:
+            #    raise ValueError("Error: No piece to move")
 
-            if board[0, BAR_POS] > 0 and move.src != BAR_POS:
-                raise ValueError("Error: Must move from bar first")
+            #if board[0, BAR_POS] > 0 and move.src != BAR_POS:
+            #    raise ValueError("Error: Must move from bar first")
         
-            if move.src > 24:
-                raise ValueError("Invalid src position for a move")
+            #if move.src > 24:
+            #    raise ValueError("Invalid src position for a move")
         
         # Move piece from source to destination
         board[0, move.src] -= 1
@@ -104,12 +107,11 @@ cdef class BoardState:
                 board[1, dst] = 0
                 board[1, OPP_BAR_POS] += 1
                 return True # blotted, return true
-            elif board[1, dst] > 1:
-                raise ValueError("Error: More than one opponent piece on destination")
+            #elif board[1, dst] > 1:
+            #    raise ValueError("Error: More than one opponent piece on destination")
 
-        #print("after apply sanity")
-        #BoardState.sanity_checks(board)
         if DEBUG:
+            BoardState.sanity_checks(board)
             print(f"done with move: {move.src} {move.n}")
             print(f"Board state:\n{board}")
             print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")

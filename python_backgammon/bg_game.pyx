@@ -9,6 +9,8 @@ cimport numpy as np
 cimport cython
 #rand needs to be imported from libc.stdlib, also to seed and set seed
 from libc.stdlib cimport rand, RAND_MAX, srand
+from libc.time cimport time_t, time
+
 
 from bg_common cimport *
 from bg_board cimport BoardState
@@ -477,20 +479,52 @@ cdef class BGGame:
         
         return 2  # Gammon
     
-    cpdef int play_game_to_end(self):
-        cdef int i, n_moves
-        cdef list moves
-        if self.player == NONE:
+    cpdef int play_n_games_to_end(self, n_games):
+        cdef int action
+        cdef int white_win = 0
+        cdef int black_win = 0 
+        cdef int normal = 0
+        cdef int gammon = 0
+        cdef int backgammon = 0
+        cdef int steps = 0 
+        cdef int games = 0
+        cdef int a_len
+        cdef double delta
+
+        start_time = time(NULL)
+
+        
+        for s in range(n_games):
+            self.reset()
             self.pick_first_player()
-            self.roll_dice()
-        while not self.isTerminal():
-            moves = self.get_legal_moves()
-            n_moves = len(moves)
-            if n_moves > 0:
-                i = rand() % n_moves
-                self.do_moves(moves[i])
-            self.roll_dice()
-        return self.winner
+            while not self.isTerminal():
+                self.roll_dice()
+                a = self.legal_actions()
+                a_len = len(a)  # Reduce repeated calls to `len()`
+                steps += 1
+                #pick a random action and step
+                action = a[rand() % a_len]
+                self.step(action)
+
+            games += 1
+            if self.winner == WHITE:
+                white_win += 1
+            elif self.winner == BLACK:
+                black_win += 1
+            if self.points == 1:
+                normal += 1
+            elif self.points == 2:
+                gammon += 1
+            elif self.points == 3:
+                backgammon += 1
+
+        end_time = time(NULL)
+        delta = end_time - start_time
+        
+        print(f"White Wins: {white_win} Black Wins: {black_win} Normal: {normal} Gammon: {gammon} Backgammon: {backgammon}")
+        print(f"Total Games: {games} Total Steps: {steps} Total Time: {end_time - start_time}")
+        print(f"Total Games/s: {games/delta} Total Steps/s: {steps/delta} Total Time: {end_time - start_time}")
+
 
     cpdef tuple indexToDice(self, unsigned char index):
         cdef list diceLookup = [(1,1), (1,2), (1,3), (1,4), (1,5), (1,6),
