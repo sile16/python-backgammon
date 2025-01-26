@@ -4,8 +4,8 @@ import numpy as np
 import os
 import sys
 
-from python_backgammon.bg_game import set_debug, get_debug, BGGame
-from python_backgammon.bg_moves import MoveSequence
+from bg_game import set_debug, get_debug, BGGame
+from bg_moves import MoveSequence
 
 
 # Constants for player colors
@@ -108,6 +108,15 @@ def test_bearing_off(default_state):
     for move in legal_moves:
         assert move == 0 or move == 15
 
+def test_rendering(default_state):
+    """Ensure the board state renders correctly."""
+    default_state.reset()
+    default_state.set_player(WHITE)
+    for _ in range(5):
+        default_state.roll_dice()
+        a = default_state.legal_actions()
+        default_state.step(a[0])
+    default_state.render()
 
 if __name__ == "__main__":
     pytest.main()

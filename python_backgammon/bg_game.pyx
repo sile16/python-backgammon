@@ -66,7 +66,7 @@ cdef class BGGame:
         public int n_legal_remaining_dice # could be less than reamining based on 
         public bint last_move
         public bint first_move
-        public list legal_moves
+        #public list legal_moves
         public int points
         public list move_seq_list
         public MoveSequence move_seq_curr
@@ -91,7 +91,7 @@ cdef class BGGame:
         #new_game.dice[1] = self.dice[1]
         new_game.bear_off[0] = self.bear_off[0]
         new_game.bear_off[0] = self.bear_off[1]
-        new_game.legal_moves = self.legal_moves.copy()
+        #new_game.legal_moves = self.legal_moves.copy()
         new_game.points = self.points
         new_game.move_seq_list = self.move_seq_list.copy()
         new_game.n_legal_remaining_dice = self.n_legal_remaining_dice
@@ -112,7 +112,7 @@ cdef class BGGame:
         if not self.isTerminal():
             self.set_player(1 - self.player)
             self.roll_dice()
-        self.legal_moves = []
+        #self.legal_moves = []
 
     cpdef action_to_string (self, int action):
         cdef Move m = self.uncompress(action)
@@ -238,6 +238,8 @@ cdef class BGGame:
     
     cpdef void render(self):
         #print the board to the console
+        cdef list legal_actions = self.legal_actions()
+
         print(f"Player: {self.player} Dice: {self.dice} Remaining Dice: {self.remaining_dice}")
         print(f"Blots: {self.blots}")
         print(f"Blocks: {self.blocks}")
@@ -246,14 +248,14 @@ cdef class BGGame:
         print(f"{self.board_curr}")
         print(f"Points: {self.points}")
         print(f"Winner: {self.winner}")
-        print(f"Legal Moves: {self.legal_moves()}")
+        print(f"Legal Moves: {legal_actions}")
         print(f"n_legal_remaining_dice: {self.n_legal_remaining_dice}")
         #print(f"Last Move: {self.last_move}")
     
     cpdef void reset(self):
         self.player = NONE
         self.winner = NONE
-        self.legal_moves = []
+        
         self.points = 0
         self.dice = (0, 0)
         self.remaining_dice = np.zeros(4, dtype=np.int8)
