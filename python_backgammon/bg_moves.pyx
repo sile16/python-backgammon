@@ -35,6 +35,12 @@ cdef class MoveSequence:
         self.dice[1] = 0
         self.n_used_moves = 0
 
+    def __str__(self) -> str:
+        output = f"Dice: {self.dice[0]} {self.dice[1]}, Moves: "
+        for m in self.moves:
+            output += f"[{m.src}, {m.n}], "
+
+
     # implement compare function, so we can do movesequence1 == movesequence2
     # Implement compare function
     def __eq__(self, MoveSequence other):
