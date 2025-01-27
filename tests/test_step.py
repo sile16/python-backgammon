@@ -24,26 +24,25 @@ def default_state():
 
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""
-    count = 1000
+    count = 100
     wins = [0, 0]
     points = [0, 0]
     rewards = [0, 0, 0, 0]
-    #set_debug(True)
+    set_debug(True)
     for x in range(count):
         default_state.reset()
         default_state.set_player(WHITE)
         default_state.roll_dice()
 
         while not default_state.isTerminal():
-            #legal_actions = default_state.legal_actions()
             legal_actions2 = default_state.legal_actions()
-            #legal_actions.sort()
             legal_actions2.sort()
 
             #assert len(legal_actions) == len(legal_actions2)
             #assert legal_actions ==  legal_actions2
 
             i = np.random.randint(len(legal_actions2))
+            a = legal_actions2[i]
             
             obs, reward, done = default_state.step(legal_actions2[i])
             

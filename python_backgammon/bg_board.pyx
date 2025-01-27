@@ -41,10 +41,12 @@ cdef class BoardState:
 
         # Must have a piece to move
         if board[0, src] == 0:
+            #print("no source Pip")
             return False
 
         # Must move from bar first
         if board[0, BAR_POS] > 0 and src != BAR_POS:
+            #print("must move from bar")
             return False
         
         if src > 24:
@@ -55,19 +57,25 @@ cdef class BoardState:
         # Handle bearing off
         if dst >= BEAR_OFF_POS:
             if not BoardState.can_bear_off(board):
+                #print("can not bear off")
                 return False
             
             if dst > BEAR_OFF_POS:
                 for i in range(HOME_START_POS, src):
                     if board[0, i] > 0:
+                        #print("can not bear off from this point with extra moves if larger point possible")
                         return False
 
+            #"print yes bearing off"
             return True
+            
             
         # Check if destination is blocked by opponent
         if board[1, dst] > 1:
+            #print("destination blocked by opponent")
             return False
-            
+        
+        #print("can move")
         return True
 
     @staticmethod

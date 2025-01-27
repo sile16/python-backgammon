@@ -7,8 +7,8 @@ import sys
 # Current best Cython single thread is 120 games / second, 708 with 8 threads
 
 # Get the absolute path to the project root
-from python_backgammon.bg_game import set_debug, get_debug, BGGame
-from python_backgammon.bg_moves import MoveSequence
+from bg_game import set_debug, get_debug, BGGame
+from bg_moves import MoveSequence
 
 
 def initialize_stats():
@@ -102,7 +102,7 @@ def print_state(state):
     print("[[0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5]]")
     print(np.array_str(state.board, precision=2, suppress_small=True))
 
-def run_games(n_games):
+def run_games(n_games, copy=False):
     """Run multiple games sequentially"""
     start_time = time.time()
     print(f"Running {n_games} games on a single thread")
@@ -130,4 +130,5 @@ if __name__ == "__main__":
     N_GAMES = 5000  # You can adjust the number of games as needed
     #run_games(N_GAMES)
     bg = BGGame()
-    bg.play_n_games_to_end(N_GAMES)
+    bg.play_n_games_to_end(N_GAMES, False)
+    bg.play_n_games_to_end(N_GAMES, True)

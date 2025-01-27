@@ -6,8 +6,8 @@ import sys
 
 
 
-from python_backgammon.bg_game import set_debug, get_debug, BGGame
-from python_backgammon.bg_moves import MoveSequence
+from bg_game import set_debug, get_debug, BGGame
+from bg_moves import MoveSequence
 
 
 # Constants for player colors

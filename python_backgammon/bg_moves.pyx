@@ -267,7 +267,8 @@ cdef class MoveSequence:
        
         return new_seq
     
-    cdef void set_final_board(self, np.ndarray[np.int8_t, ndim=2] board):  
+    cdef void set_final_board(self, np.ndarray[np.int8_t, ndim=2] board):
+        #if board != None:
         self.final_board = board.copy()
         self.has_final_board = True
 
@@ -276,7 +277,168 @@ cdef class MoveSequence:
 @cython.wraparound(False)
 cdef class MoveGenerator:
     """Static methods for generating legal moves"""
+    @staticmethod
+    cdef list generate_moves4(
+        np.ndarray[np.int8_t, ndim=2] board,
+        unsigned char d1, #D1 is always higher, enforced by set_dice
+        unsigned char d2,
+    ):
+        """ new approach is to just find next dice useage not the full roll options"""
+        """ we have to look ahead enough to find double dice usage vs single dice usage options"""
+        cdef Move move
+        cdef MoveSequence curr_seq
+        cdef unsigned char move_num, src, dst, temp
+        cdef bint found_valid_move, blotted
+        cdef bint isDouble = d1 == d2
+        cdef bint large_die_single = False
+
+        cdef list single_moves = list()
+        cdef list double_moves = list()
+
+        cdef int idx = 0
+        cdef int aidx
+
+        # Process both dice orders if not a double
+        if isDouble:
+            idx = 0
+            for x in range(BAR_POS, BEAR_OFF_POS):
+                if board[0, x] > 0:
+                    if BoardState.can_move_pip(board, x, d1):
+                        single_moves.append(idx)
+                        if d2 > 0:
+                            #d2 is remaining moves
+                            single_moves.append(idx + 15)
+                    
+                    idx += 1 # only increment idx on points with 1 or more pips, 
+            
+            #if DEBUG:
+            #    for x in single_moves:
+            #        assert x > 0 and x < 30
+
+            if len(single_moves) == 0:
+                single_moves.append(30)
+
+            return single_moves 
+
+
+        
+        offset = 0
+        offset2 = 15
+
+        if d2 > d1:
+            temp = d1
+            d1 = d2
+            d2 = temp
+            offset = 15
+            offset2 = 0
+
     
+        max_moves = 0
+        max_die = 0
+        cdef Move m
+        cdef np.ndarray orig
+        
+        a_idx = 0
+        for a in range(BAR_POS, BEAR_OFF_POS):
+            if board[0, a] == 0:
+                continue
+            
+            elif board[0, a] > 0: #need to keep track of a_idx
+                #print(f"a: {a}")
+                #print(f"checking a can move {a} {d1}")
+                if BoardState.can_move_pip(board, a, d1):
+                    #print(f" Yes: a can move {a} {d1}")
+                    
+                    found_double = False
+                    if d2 > 0:
+                        m.src = a
+                        m.n = d1
+                        #orig = board.copy()
+                        a_blotted = BoardState.apply_move(board, m)
+                        for b in range(BAR_POS, BEAR_OFF_POS):
+                            if BoardState.can_move_pip(board, b, d2):
+                                found_double = True
+                                break 
+
+                        BoardState.undo_move(board, m, a_blotted)
+                        #if not np.array_equal(orig, board):
+                        #    raise ValueError("Board not returned to original state")
+
+                    if found_double:
+                        double_moves.append(a_idx + offset)
+                        
+                        #print(f"1Found double move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[0]}")
+                    elif len(double_moves) == 0: # don't need to check max die, because we are highest
+                        # it is a single, but if we've already found a doulbe we don't need to track
+                        # that's why we check len(double_moves) == 0
+                        #print(f"2Found single move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[0]}")
+                        single_moves.append(a_idx + offset)
+
+                #increment a_idx only if we have a pip on the point
+                a_idx += 1
+
+        a_idx = 0
+
+        if len(single_moves) > 0:
+            large_die_single_found = True
+    
+            
+        if d2 > 0:
+            for a in range(BAR_POS, BEAR_OFF_POS):
+
+                if board[0, a] == 0:
+                    continue
+                elif board[0, a] > 0: # need this to keep track of a_idx
+
+                    #print(f"7checking a can move {a} {d2}")
+                    if BoardState.can_move_pip(board, a, d2):
+                        found_double = False
+                        if d1 > 0:
+                            #check for second dice
+                            m.src = a
+                            m.n = d2
+                            #orig = board.copy()
+                            a_blotted = BoardState.apply_move(board, m)
+                            
+                            for b in range(BAR_POS, BEAR_OFF_POS):
+                                if board[0, b] > 0 :
+                                    #print(f"8checking b can move {b} {d1}")
+                                    if BoardState.can_move_pip(board, b, d1):
+                                        found_double = True
+                                        #print("9found double")
+                                        break
+                            BoardState.undo_move(board, m, a_blotted)
+                            #if not np.array_equal(orig, board):
+                            #    raise ValueError("Board not returned to original state")
+
+                        if found_double:
+                            double_moves.append(a_idx + offset2)
+                            #print(f"3Found double move: pos {a} a_idx {a_idx} offset {offset2}  dice {d2}")
+                        elif len(double_moves) == 0 and not large_die_single_found:
+                            # so no double found, so only add to list if we are max die
+                            single_moves.append(a_idx + offset2)
+                            #print(f"4Found single move: pos {a} a_idx {a_idx} offset {offset2}  dice {d2}")
+
+                    #increment a_idx only if we have a pip on the point    
+                    a_idx += 1
+            
+        if len(double_moves) > 0:
+            #print(f"double moves: {double_moves}")
+            return double_moves
+        elif len(single_moves) > 0:
+            #print("single moves: ", single_moves)
+            return single_moves
+        else:
+            #return a pass move, no moves found
+            single_moves.append(30)
+            return single_moves
+
+        #filter is uneeded as we are only looking for the next move
+        
+    ## everything below here is old
+    ## Old and not used but keep for reference and test case checking
+    ## Todo: Remove later
+
     @staticmethod
     cdef list generate_moves(np.ndarray[np.int8_t, ndim=2] board, unsigned char d1, unsigned char d2):
         cdef list all_sequences = []
@@ -621,147 +783,7 @@ cdef class MoveGenerator:
                     curr_seq.set_final_board(curr_board)
                     all_sequences.append(curr_seq)
     
-    @staticmethod
-    cdef list generate_moves4(
-        np.ndarray[np.int8_t, ndim=2] board,
-        unsigned char d1,
-        unsigned char d2,
-    ):
-        """ new approach is to just find next dice useage not the full roll options"""
-        cdef Move move
-        cdef MoveSequence curr_seq
-        cdef unsigned char move_num, src, dst
-        cdef bint found_valid_move, blotted
-        cdef bint isDouble = d1 == d2
-
-        cdef list single_moves = list()
-        cdef list double_moves = list()
-
-        cdef int idx = 0
-        cdef int aidx, bidx
-        # Process both dice orders if not a double
-        if isDouble:
-            idx = 0
-            for x in range(BAR_POS, BEAR_OFF_POS):
-                if board[0, x] > 0:
-                    if BoardState.can_move_pip(board, x, d1):
-                        single_moves.append(idx)
-                        if d2 > 0:
-                            #d2 is remaining moves
-                            single_moves.append(idx + 15)
-                    idx += 1 # only increment idx on points with 1 or more pips, 
-            
-            #if DEBUG:
-            #    for x in single_moves:
-            #        assert x > 0 and x < 30
-
-            if len(single_moves) == 0:
-                single_moves.append(30)
-
-            return single_moves 
-
-
-        dice_orders = (d1, d2)
-        offset = 0
-        offset2 = 15
-
-        if d2 > d1:
-            dice_orders = (d2, d1)
-            offset = 15
-            offset2 = 0
-
-        max_moves = 0
-        max_die = 0
-        cdef Move m
-        cdef np.ndarray orig
-        
-        a_idx = 0
-        for a in range(BAR_POS, BEAR_OFF_POS):
-            if board[0, a] > 0:
-                
-                if BoardState.can_move_pip(board, a, dice_orders[0]):
-                    
-                    found_double = False
-                    if dice_orders[1] > 0:
-                        m.src = a
-                        m.n = dice_orders[0]
-                        #orig = board.copy()
-                        a_blotted = BoardState.apply_move(board, m)
-                        for b in range(BAR_POS, BEAR_OFF_POS):
-                            if BoardState.can_move_pip(board, b, dice_orders[1]):
-
-                                found_double = True
-                                break 
-                        BoardState.undo_move(board, m, a_blotted)
-                        #if not np.array_equal(orig, board):
-                        #    raise ValueError("Board not returned to original state")
-
-                    if found_double:
-                        double_moves.append(a_idx + offset)
-                        #print(f"Found double move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[0]}")
-                    elif len(double_moves) == 0: # don't need to check max die, because we are highest
-                        # it is a single, but if we've already found a doulbe we don't need to track
-                        # that's why we check len(double_moves) == 0
-                        #print(f"Found double move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[0]}")
-                        single_moves.append(a_idx + offset)
-
-                #increment a_idx only if we have a pip on the point
-                a_idx += 1
-
-        a_idx = 0
-        for a in range(BAR_POS, BEAR_OFF_POS):
-            if dice_orders[1] == 0:
-                break
-            if board[0, a] > 0:
-                if BoardState.can_move_pip(board, a, dice_orders[1]):
-                    found_double = False
-                    if dice_orders[1] > 0:
-                        #check for second dice
-                        m.src = a
-                        m.n = dice_orders[1]
-                        #orig = board.copy()
-                        a_blotted = BoardState.apply_move(board, m)
-                        for b in range(BAR_POS, BEAR_OFF_POS):
-                            if BoardState.can_move_pip(board, b, dice_orders[0]):
-                                found_double = True
-                                break
-                        BoardState.undo_move(board, m, a_blotted)
-                        #if not np.array_equal(orig, board):
-                        #    raise ValueError("Board not returned to original state")
-
-                    if found_double:
-                        double_moves.append(a_idx + offset2)
-                        #print(f"Found double move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[1]}")
-                    elif len(double_moves) == 0 and dice_orders[1] >= max_die:
-                        # so no double found, so only add to list if we are max die
-                        single_moves.append(a_idx + offset2)
-                        #print(f"Found single move: pos {a} a_idx {a_idx} offset {offset}  dice {dice_orders[1]}")
-
-                #increment a_idx only if we have a pip on the point    
-                a_idx += 1
-        
-        if len(double_moves) > 0:
-            #print(f"double moves: {double_moves}")
-            return double_moves
-        elif len(single_moves) > 0:
-            #print("single moves: ", single_moves)
-            return single_moves
-        else:
-            #return a pass move, no moves found
-            single_moves.append(30)
-            return single_moves
-
-        #filter is uneeded as we are only looking for the next move
-        
-
-
-
-
-
-               
-
-
-
+    
     @staticmethod
     cdef list _filter_moves2(list sequences, unsigned char max_moves, unsigned char max_die, bint filter):
 

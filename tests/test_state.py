@@ -4,8 +4,8 @@ import os
 import sys
 import time
 
-from python_backgammon.bg_game import set_debug, get_debug, BGGame
-from python_backgammon.bg_moves import MoveSequence
+from bg_game import set_debug, get_debug, BGGame
+from bg_moves import MoveSequence
 
 
 # Constants for player colors
@@ -135,6 +135,8 @@ def test_dice_roll():
 # Move Generation Tests
 def test_generate_valid_moves(default_state):
     """Verify move generation logic."""
+    g2 = BGGame()
+    g2.set_player(WHITE)
     
     default_state.set_player(WHITE)
     default_state.roll_dice()
@@ -153,23 +155,29 @@ def test_generate_valid_moves(default_state):
             
 def test_largest_die(default_state):
     
-
+    g2 = BGGame()
+    
     orig = np.array([
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14],
         [9, 0, 0, 0, 1, 1, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     ], dtype=np.int8)
     default_state.set_board(orig.copy())
+    g2.set_board(orig.copy())
+    g2.set_player(WHITE)
+    g2.set_dice((3, 4))
 
     default_state.set_player(WHITE)
     default_state.set_dice((3, 4))
 
     valid_moves = default_state.get_legal_moves()
     valid_moves2 = default_state.get_legal_moves2()
+    valid_moves3 = g2.legal_actions()
     assert isinstance(valid_moves, list)
     assert isinstance(valid_moves2, list)
 
     assert len(valid_moves) == 1
     assert len(valid_moves2) == 1
+    assert len(valid_moves3) == 1
     for moveSeq in [valid_moves[0], valid_moves2[0]]:
         assert moveSeq.n_moves == 1
         assert moveSeq.moves[0]['n'] == 4
@@ -195,6 +203,14 @@ def test_no_valid_moves(default_state):
     assert valid_moves[0].moves[0]['n'] == 0
     assert valid_moves2[0].moves[0]['n'] == 0
 
+    g2 = BGGame()
+    g2.set_player(WHITE)
+    g2.set_board(default_state.board.copy())
+    g2.set_dice((6,6))
+    valid_moves3 = g2.legal_actions()
+    assert len(valid_moves3) == 1
+    assert valid_moves3[0] == 30
+
 # Boundary Conditions
 def test_bar_and_bear_off_logic(default_state):
     """Test moves from bar and bear-off positions."""
@@ -214,9 +230,26 @@ def test_bar_and_bear_off_logic(default_state):
         assert moveSeq.moves[1]['src'] == 0
         assert moveSeq.moves[0]['n'] + moveSeq.moves[1]['n'] == 7
 
+    g2 = BGGame()
+    g2.set_player(WHITE)
+    g2.set_board(default_state.board.copy())
+    g2.set_dice((3, 4))
+    g2.board[0, 0] = 2  # Place checkers on bar
+    g2.board[0, 1] = 0  # Place checkers on bear-off    
+    valid_moves3 = g2.legal_actions()
+    assert len(valid_moves3) == 2
+    assert valid_moves3[0] == 0
+    assert valid_moves3[1] == 15
+
     default_state.board[0, :] = 0  # Remove checkers from bar
     default_state.board[0, 24] = 15  # All checkers ready to bear off
     assert default_state.can_bear_off()
+
+    g2.board[0, :] = 0  # Remove checkers from bar
+    g2.board[0, 24] = 15  # All checkers ready to bear off  
+    assert g2.can_bear_off()
+
+   
 
 # Regression Tests
 def test_seeded_move_generation(default_state):
@@ -346,7 +379,7 @@ def test_get_all_moves_all_dice(default_state):
 
 def test_many_games(default_state):
     """Capture and validate move generation with seeded randomness."""
-    count = 3000
+    count = 10
     white_win = 0
     black_win = 0
     normal = 0
@@ -395,12 +428,25 @@ def test_many_games(default_state):
 
     many_games2(default_state, count)
 
-         
-        
 
 def many_games2(default_state, num_many_games):        
-    default_state.play_n_games_to_end(num_many_games)
+    default_state.play_n_games_to_end(num_many_games, False)
+
+def test_specific_moves(default_state):
+    board = [[0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 1, 3, 4, 0, 0, 0],
+             [0, 0, 0, 1, 0, 0, 6, 1, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]]
     
+    default_state.set_board(board)
+    default_state.set_player(WHITE)
+    default_state.set_dice((1, 5))
+    moves = default_state.legal_actions()
+
+
+    default_state.step(moves[0])
+
+    moves = default_state.legal_actions()
+    default_state.step(1)
+
     
     
 

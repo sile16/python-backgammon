@@ -112,7 +112,8 @@ cdef class BGGame:
         if not self.isTerminal():
             self.set_player(1 - self.player)
             self.roll_dice()
-        #self.legal_moves = []
+            self.move_seq_list.append(mseq)
+            self.move_seq_curr.reset()
 
     cpdef action_to_string (self, int action):
         cdef Move m = self.uncompress(action)
@@ -148,7 +149,7 @@ cdef class BGGame:
 
         if action == ACTION_PASS:
             self._no_moves_left(MoveSequence())
-            self.update_state()
+            self.update_blots_blocks_bear()
             return ( self.get_observation(), self.points, self.isTerminal() )
         
        
@@ -167,22 +168,24 @@ cdef class BGGame:
         BoardState.apply_move(self.board_curr, m)
         self.move_seq_curr.add_move(m.src, m.n)
         
+        if action > 14:
+            dice_using = 1
         
         # move dice remaining down
         for i in range(dice_using, len(self.remaining_dice) - 1):
             self.remaining_dice[i] = self.remaining_dice[i + 1]
             self.remaining_dice[i + 1] = 0
-        self.n_legal_remaining_dice -= 1
+        self.n_legal_remaining_dice -= 1 # this could go to negative on a pass, but will get reset in the next step
         
-        if self.remaining_dice[0] == 0 or self.n_legal_remaining_dice == 0:
+        if self.remaining_dice[0] == 0 or self.n_legal_remaining_dice < 1: #covers the -1 case as well, 
             #print(f"no more moves left in step()")
             # this is probably redudnat and we can just call fitler_move_from_legal_actions
             # and it should do the same thing
             
-            self._no_moves_left(self.move_seq_curr.copy())
+            self._no_moves_left(self.move_seq_curr.copy()) 
             self.move_seq_curr.reset()
 
-        self.update_state()
+        self.update_blots_blocks_bear()
         
         return ( self.get_observation(), self.points, self.isTerminal() )
 
@@ -287,7 +290,7 @@ cdef class BGGame:
             self.board = np.array(board_array, dtype=np.int8)
         
         self.set_player(self.player)
-        self.update_state()
+        self.update_blots_blocks_bear()
     
     cpdef np.ndarray get_board(self):
         """return board from current perspective"""
@@ -307,7 +310,7 @@ cdef class BGGame:
     cpdef bint can_bear_off(self):
         return BoardState.can_bear_off(self.board_curr)
 
-    cpdef void update_state(self):
+    cpdef void update_blots_blocks_bear(self):
 
         for i in range(24):
             #blots and blocks
@@ -357,7 +360,9 @@ cdef class BGGame:
         """Set dice values for testing purposes."""
         
         if dice[0] > 0 and dice[0] < 7 and dice[1] > 0 and dice[1] < 7:
+            
             self.dice = dice
+            
             self.remaining_dice[0] = self.dice[0]
             self.remaining_dice[1] = self.dice[1]
             if self.dice[0] == self.dice[1]:
@@ -370,6 +375,8 @@ cdef class BGGame:
                 self.n_legal_remaining_dice = 2
             self.first_move = True
             self.last_move = False
+
+
     
     cpdef void pick_first_player(self):
         while self.player == NONE:
@@ -481,7 +488,7 @@ cdef class BGGame:
         
         return 2  # Gammon
     
-    cpdef int play_n_games_to_end(self, n_games):
+    cpdef int play_n_games_to_end(self, n_games, copy):
         cdef int action
         cdef int white_win = 0
         cdef int black_win = 0 
@@ -492,6 +499,7 @@ cdef class BGGame:
         cdef int games = 0
         cdef int a_len
         cdef double delta
+        cdef BGGame dummy
 
         start_time = time(NULL)
 
@@ -507,8 +515,11 @@ cdef class BGGame:
                 #pick a random action and step
                 action = a[rand() % a_len]
                 self.step(action)
+                if copy:
+                    dummy = self.copy()
 
             games += 1
+            
             if self.winner == WHITE:
                 white_win += 1
             elif self.winner == BLACK:
@@ -525,7 +536,9 @@ cdef class BGGame:
         
         print(f"White Wins: {white_win} Black Wins: {black_win} Normal: {normal} Gammon: {gammon} Backgammon: {backgammon}")
         print(f"Total Games: {games} Total Steps: {steps} Total Time: {end_time - start_time}")
-        print(f"Total Games/s: {games/delta} Total Steps/s: {steps/delta} Total Time: {end_time - start_time}")
+        if delta > 0:
+            print(f"Total Games/s: {games/delta} Total Steps/s: {steps/delta} Total Time: {delta}")
+        
 
 
     cpdef tuple indexToDice(self, unsigned char index):
