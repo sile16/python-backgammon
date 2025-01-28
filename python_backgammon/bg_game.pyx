@@ -148,7 +148,11 @@ cdef class BGGame:
         cdef MoveSequence mSeq
 
         if action == ACTION_PASS:
-            self._no_moves_left(MoveSequence())
+            # todo: put a check here, but for now we will just pass
+            #if self.n_legal_remaining_dice > 1:
+            #    raise ValueError(f"Invalid action: {action} using_dice: {self.remaining_dice} ")
+            self._no_moves_left(self.move_seq_curr.copy())
+            self.move_seq_curr.reset()
             self.update_blots_blocks_bear()
             return ( self.get_observation(), self.points, self.isTerminal() )
         
@@ -177,13 +181,13 @@ cdef class BGGame:
             self.remaining_dice[i + 1] = 0
         self.n_legal_remaining_dice -= 1 # this could go to negative on a pass, but will get reset in the next step
         
-        if self.remaining_dice[0] == 0 or self.n_legal_remaining_dice < 1: #covers the -1 case as well, 
+        #if self.remaining_dice[0] == 0 or self.n_legal_remaining_dice < 1: #covers the -1 case as well, 
             #print(f"no more moves left in step()")
             # this is probably redudnat and we can just call fitler_move_from_legal_actions
             # and it should do the same thing
             
-            self._no_moves_left(self.move_seq_curr.copy()) 
-            self.move_seq_curr.reset()
+        #    self._no_moves_left(self.move_seq_curr.copy()) 
+        #    self.move_seq_curr.reset()
 
         self.update_blots_blocks_bear()
         

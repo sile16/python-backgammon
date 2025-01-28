@@ -304,6 +304,10 @@ cdef class MoveGenerator:
         cdef int idx = 0
         cdef int aidx
 
+        if d1 == 0:
+            single_moves.append(30)
+            return single_moves
+
         # Process both dice orders if not a double
         if isDouble:
             idx = 0
