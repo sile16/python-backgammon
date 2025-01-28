@@ -116,6 +116,8 @@ cdef class BGGame:
             self.move_seq_curr.reset()
 
     cpdef action_to_string (self, int action):
+        if action == 30:
+            return "End Turn"
         cdef Move m = self.uncompress(action)
         return f"Move: From: {m.src} with Dice: {m.n}  landing on {min(m.src + m.n, BEAR_OFF_POS)}"
 
@@ -146,6 +148,8 @@ cdef class BGGame:
         cdef int dice_using = 0
         cdef int action_idx = 0
         cdef MoveSequence mSeq
+        cdef int pips_off = 0 
+        cdef float reward = 0
 
         if action == ACTION_PASS:
             # todo: put a check here, but for now we will just pass
@@ -169,6 +173,7 @@ cdef class BGGame:
     
         #print("about to apply move")
 
+        pips_off = self.board_curr[0, BEAR_OFF_POS]
         BoardState.apply_move(self.board_curr, m)
         self.move_seq_curr.add_move(m.src, m.n)
         
@@ -190,8 +195,13 @@ cdef class BGGame:
         #    self.move_seq_curr.reset()
 
         self.update_blots_blocks_bear()
+
+        if self.points:
+            reward = self.points
+        elif self.board_curr[0, BEAR_OFF_POS] > pips_off:
+            reward = 0.02
         
-        return ( self.get_observation(), self.points, self.isTerminal() )
+        return ( self.get_observation(), reward, self.isTerminal() )
 
     
     cpdef np.ndarray get_observation(self):
